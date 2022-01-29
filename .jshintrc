@@ -1,0 +1,26 @@
+{
+  "undef": true,
+  "unused": true,
+  "indent": 3,
+  "esversion": 6,
+  "browser": true,
+  "globalstrict": true,
+  "devel": true,
+  "globals": {
+    "SPServerREST": true,
+    "formatRESTBody": true,
+    "SPSiteREST": true,
+    "SPListREST": true,
+    "constructQueryParameters": true,
+    "$": true,
+    "serialSPProcessing": true,
+    "ParseSPUrl": true,
+    "isIterable": true,
+    "batchRequest": true,
+    "checkEntityTypeProperty": true,
+    "httpRequest": true,
+    "httpRequestPromise": true,
+    "createGuid": true,
+    "SP": true
+  }
+}
