@@ -32,6 +32,8 @@ class SPUtilityEmailService {
         site: string;
     }) {
         this.server = parameters.server;
+        if (this.server.search(/^https?:\/\//) < 0)
+            this.server += "https://" + this.server;
         this.site = parameters.site;
     }
 
@@ -87,7 +89,7 @@ class SPUtilityEmailService {
             if (this.site && this.site.length > 0)
                 uri += "/" + this.site;
             $.ajax({
-                url: "https://" + uri + "/_api/contextinfo",
+                url: uri + "/_api/contextinfo",
                 method: "POST",
                 headers: {
                     "Accept": "application/json;odata=verbose"
@@ -98,7 +100,7 @@ class SPUtilityEmailService {
                         // the actual transmission
                         digValue = responseJSON.d.GetContextWebInformation.FormDigestValue;
                     $.ajax({
-                        url: "https://" + uri + "/_api/SP.Utilities.Utility.SendEmail",
+                        url: uri + "/_api/SP.Utilities.Utility.SendEmail",
                         method: "POST",
                         headers: {
                             "Accept": "application/json;odata=verbose",
@@ -117,11 +119,9 @@ class SPUtilityEmailService {
                         contentType: "application/json;odata=verbose",
                         success: (data: any, message: string, reqObj: JQueryXHR) => {
                             resolve(reqObj.status);
-                            console.log("Email success");
                         },
                         error: (reqObj: any) => {
                             reject(reqObj);
-                            console.log("Email failure: " + "\n  HTTP Status: " + reqObj.status + "\n  Message: " + reqObj.responseJSON.error.message.value);
                         }
                     });
                 },

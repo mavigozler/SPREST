@@ -253,6 +253,22 @@ How to get info on all users through siteuserinfolist:
 	};
 }
 
+/**
+ * @function getSharePointCurrentUserInfo -- return infor from SP server about current user
+ * @param parameters the server hostname and the site 
+ * @returns Promise with response being several parameters
+ *    email
+ * 	userId
+ * 	loginName
+ * 	title
+ * 	jobTitle
+ * 	lastName
+ * 	firstName
+ * 	workPhone
+ * 	userName
+ * 	created
+ * 	modified
+ */
 function getSharePointCurrentUserInfo(parameters: {
 	server: string;
 	site: string;
