@@ -168,21 +168,22 @@ function batchRequestingQueue(
 		elements: IBatchHTTPRequestParams, 
 		allRequests: IBatchHTTPRequestForm[]
 ): Promise<any> {
-	let responses = "",
+	let allRequestsCopy: IBatchHTTPRequestForm[] = JSON.parse(JSON.stringify(allRequests)),
+		responses = "",
 		subrequests: IBatchHTTPRequestForm[] = [];
 
-	console.log("Queued " + allRequests.length + " requests");
+	console.log("Queued " + allRequestsCopy.length + " requests");
 	return new Promise((resolve, reject) => {
-		for (let j = 0, i = 0; j < MAX_REQUESTS && i < allRequests.length; j++, i++)
-			subrequests.push(allRequests[i]);
+		for (let j = 0, i = 0; j < MAX_REQUESTS && i < allRequestsCopy.length; j++, i++)
+			subrequests.push(allRequestsCopy[i]);
 		console.log("Batch of " + subrequests.length + " requests proceeding to network");
-		allRequests.splice(0, MAX_REQUESTS);
+		allRequestsCopy.splice(0, MAX_REQUESTS);
 		singleBatchRequest(elements, subrequests).then((response: any) => {
 			if (typeof response == "object")
 				response = JSON.stringify(response);
 			responses += response;
-			if (allRequests.length > 0)
-				batchRequestingQueue(elements, allRequests);
+			if (allRequestsCopy.length > 0)
+				batchRequestingQueue(elements, allRequestsCopy);
 			else
 				resolve(responses);
 		}).catch((response) => {
@@ -192,13 +193,6 @@ function batchRequestingQueue(
 	});
 }
 
-function CreateUUID():string {
-	return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-		 let r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-	 
-		 return v.toString(16);
-	});
-}
 
 /**
  * @function singleBatchRequest -- used to exploit the $batch OData multiple write request
@@ -396,6 +390,14 @@ function splitRequests(responseSet: string): Promise<any> {
 			});
 		});
 	}
+}
+
+function CreateUUID():string {
+	return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+		 let r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+	 
+		 return v.toString(16);
+	});
 }
 
 /**
