@@ -149,6 +149,16 @@ class SPServerREST {
 
 const MAX_REQUESTS = 500;
 
+
+type TFetchInfo = {
+	RequestedUrl: string;
+	HttpStatus: number;
+	ContentType: string | null;
+	Etag: string | null; // \"\d{3}\"
+	Data: any;
+	ProcessedData: any[];
+};
+
 /**
  * @function batchRequestingQueue -- when requests are too large in number (> MAX_REQUESTS), the batching
  * 		needs to be broken up in batches
@@ -167,9 +177,9 @@ const MAX_REQUESTS = 500;
 function batchRequestingQueue(
 		elements: IBatchHTTPRequestParams, 
 		allRequests: IBatchHTTPRequestForm[]
-): Promise<any> {
+): Promise<TFetchInfo[]> {
 	let allRequestsCopy: IBatchHTTPRequestForm[] = JSON.parse(JSON.stringify(allRequests)),
-		responses = "",
+		responses: TFetchInfo[] = [],
 		subrequests: IBatchHTTPRequestForm[] = [];
 
 	console.log("Queued " + allRequestsCopy.length + " requests");
@@ -178,10 +188,9 @@ function batchRequestingQueue(
 			subrequests.push(allRequestsCopy[i]);
 		console.log("Batch of " + subrequests.length + " requests proceeding to network");
 		allRequestsCopy.splice(0, MAX_REQUESTS);
-		singleBatchRequest(elements, subrequests).then((response: any) => {
-			if (typeof response == "object")
-				response = JSON.stringify(response);
-			responses += response;
+		singleBatchRequest(elements, subrequests).then((response: TFetchInfo[] | null) => {
+			if (response != null)
+				responses = responses.concat(response);
 			if (allRequestsCopy.length > 0)
 				batchRequestingQueue(elements, allRequestsCopy);
 			else
@@ -192,6 +201,7 @@ function batchRequestingQueue(
 		});
 	});
 }
+
 
 
 /**
@@ -215,11 +225,12 @@ function batchRequestingQueue(
 function singleBatchRequest(
 	elements: IBatchHTTPRequestParams, 
 	requests: IBatchHTTPRequestForm[]
-) {
+): Promise<TFetchInfo[] | null> {
 	return new Promise((resolve, reject) => {
 		let multipartBoundary = "batch_" + CreateUUID(),
 				changeSetBoundary = "changeset_" + CreateUUID(), 
 				protocol = elements.protocol ?? "https://",
+				requestedUrls: string[] = [],
 				allHeaders = "",
 				body = "",
 				content = "",
@@ -248,6 +259,7 @@ function singleBatchRequest(
 			body += "\nContent-Transfer-Encoding: binary";
 	
 			body += "\n\n" + currentMethod + " " + request.url + " HTTP/1.1";
+			requestedUrls.push(request.url);
 
  			// header part
 			if (request.headers)
@@ -306,18 +318,19 @@ function singleBatchRequest(
 					},
 					data: content,
 					success: (data: any) => {
-						splitRequests(data).then((response) => {
+						splitRequests(data, requestedUrls).then((response: TFetchInfo[] | null) => {
 							resolve(response); // should be array of all responses to batch requests
 						}).catch((response: any) => {
 							reject(response);
 						});
 					},
+					// error completing the batch request
 					error: (reqObj: object) => {
 						reject(reqObj);
 					}
 				});
 			},
-
+			// Error getting POST token
 			error: (reqObj: object) => {
 				reject(reqObj);
 			}
@@ -325,24 +338,42 @@ function singleBatchRequest(
 	});
 }
 
-function splitRequests(responseSet: string): Promise<any> {
+function splitRequests(
+	responseSet: string,
+	requestedUrls: string[]
+): Promise<TFetchInfo[] | null> {
 	return new Promise((resolve, reject) => {
-		let checkResponse: Promise<any>[] = [],
-		allResponses: RegExpMatchArray | null = responseSet.match(/HTTP\/1.1[^\{]+(\{.*\})/g);
+		let idx: number,
+			urlIndex: number = 0,
+			checkResponse: Promise<any>[] = [],
+			match: RegExpMatchArray | null,
+			fetchInfo: TFetchInfo[] = [],
+			allResponses: RegExpMatchArray | null = responseSet.match(/HTTP\/1.1[^\{]+(\{.*\})/g);
 
 		if (allResponses == null)
 			return resolve(null);
-		for (let response of allResponses!)
+		for (let response of allResponses!) {
+			idx = fetchInfo.push({
+				RequestedUrl: requestedUrls[urlIndex++],
+				HttpStatus: parseInt(response.match(/HTTP\/\d\.\d (\d{3})/)![1]),
+				ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
+				Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
+				Data: JSON.parse(response.match(/\{.*\}/)![0]),
+				ProcessedData: []
+			}) - 1;
 			checkResponse.push(new Promise((resolve, reject) => {
-				collectNext(JSON.parse(response.match(/\{.*\}/)![0]), []).then((fetched) => {
+				collectNext(fetchInfo[idx].Data, []).then((fetched) => {
 					resolve(fetched);
 				}).catch((response) => {
 					reject(response);
 				});
 			}));
+		}
 
 		Promise.all(checkResponse).then((fetches) => {
-			resolve(fetches);
+			for (idx = 0; idx < fetches.length; idx++)
+				fetchInfo[idx].ProcessedData = fetches[idx];
+			resolve(fetchInfo);		
 		}).catch((response) => {
 			reject(response);
 		});
