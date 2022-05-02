@@ -3,12 +3,20 @@ interface ISPBaseListFieldProperties {
 	__metadata: { type: string; }
 	Id: number;
 	InternalName: string;
+	Description: string;
+	DefaultValue: string;
 	Title: string;
 	FromBaseType: boolean;
 	CanBeDeleted: boolean;
 	Required: boolean;
 	FieldTypeKind: number;
 	TypeAsString: string;
+	Hidden: boolean;
+	Choices?: {
+		__metadata: {
+			type: string;
+		}
+	}
 }
 
 interface ISPBaseListItemProperties {

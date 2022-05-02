@@ -21,8 +21,9 @@ class SPListREST {
 	rootFolder: string;
 	contentTypes: object;
 	listIds: number[];
-	fields: any[];
-	fieldInfo: any[];
+	fields: any[];  // unaltered data from SP request
+	nonBaseTypeFields: any[];
+	fieldInfo: ISPBaseListFieldProperties[];
 	lookupFieldInfo: TLookupFieldInfo[];
 	lookupInfoCached: boolean;
 	linkToDocumentContentTypeId: string;
@@ -111,6 +112,26 @@ class SPListREST {
 					this.rootFolder = data.RootFolder;
 					this.contentTypes = data.ContentTypes.results;
 					this.fields = data.Fields.results;
+					this.nonBaseTypeFields = [];
+					for (let fld of this.fields)
+						if (fld.FromBaseType == false)
+							this.nonBaseTypeFields.push(fld);
+					this.fieldInfo = [];
+					for (let fld of this.nonBaseTypeFields)
+						this.fieldInfo.push({
+							InternalName: fld.InternalName,
+							Title: fld.Title,
+							Id: fld.Id,
+							FieldTypeKind: fld.FieldTypeKind,
+							TypeAsString: fld.TypeAsString,
+							__metadata: fld.__metadata,
+							FromBaseType: fld.FromBaseType,
+							Description: fld.Description,
+							DefaultValue: fld.DefaultValue,
+							CanBeDeleted: fld.CanBeDeleted,
+							Required: fld.Required,
+							Hidden: fld.Hidden
+						});
 					if (this.setup.include) {
 						let components: string[] = this.setup.include.split(",");
 			
@@ -352,8 +373,8 @@ class SPListREST {
 	 * @param {object} body -- usually the XMLHTTP request body passed to a POST-type request
 	 * @returns -- a Promise (this is an async call)
 	 */
-	fixBodyForSpecialFields(body: THttpRequestBody) {
-		let newBody: {[key:string]: any}, 
+	fixBodyForSpecialFields(body: THttpRequestBody): Promise<object | null> {
+		let newBody: {[key:string]: any} | null, 
 				value: string | null;
 
 		return new Promise((resolve, reject) => {
@@ -366,90 +387,75 @@ class SPListREST {
 					else
 						newBody[key + "Id"] = value;
 				resolve(newBody);
-			} else 
+			} else {
+				let requests: any[] = [];
 // with this block, we go to the server to get lookup values
-				this.getFields({
-					filter: "FromBaseType eq false"
-				}).then((response: any) => {
-					let requests = [ ];
-
-					// get the lists fields and store the info
-					if (this.fields)
-						this.fields.concat(response.data.d.results);
-					else 
-						this.fields = response.data.d.results;
-					this.fieldInfo = [ ];
-					// this will be multiple requests, so find Promise.all()
-					for (let fld of response.data.d.results)
-						requests.push(new Promise((resolve, reject) => {
-							// lookup type field
-							if (fld.FieldTypeKind == 7 && typeof fld.LookupWebId == "string" &&
-										typeof fld.LookupList == "string" && typeof fld.LookupField == "string" &&
-										fld.LookupList.length > 0 && fld.LookupField.length > 0) { // lookup
-								this.retrieveLookupFieldInfo({
-									LookupWebId: fld.LookupWebId,
-									LookupList: fld.LookupList,
-									LookupField: fld.LookupField
-								}).then((response: any) => {
-									this.lookupFieldInfo.push({
-										fieldName: fld.InternalName,
-										choices: response
-									});
-								}).catch((response) => {
-									reject(response);
-								});
-							// multi-choice field (not lookup)
-							} else if (fld.FieldTypeKind == 15) { // multi-choice field
-								resolve(this.fieldInfo.push({
-									intName: fld.InternalName,
-									multiple: 15
+				// this will be multiple requests, so find Promise.all()
+				if (!this.lookupFieldInfo)
+					this.lookupFieldInfo = [];
+				for (let fld of this.fields)
+					requests.push(new Promise((resolve, reject) => {
+						// lookup type field
+						if (fld.FieldTypeKind == 7 && typeof fld.LookupWebId == "string" &&
+									typeof fld.LookupList == "string" && typeof fld.LookupField == "string" &&
+									fld.LookupList.length > 0 && fld.LookupField.length > 0) { // lookup
+							this.retrieveLookupFieldInfo({
+								LookupWebId: fld.LookupWebId,
+								LookupList: fld.LookupList,
+								LookupField: fld.LookupField
+							}).then((response: any) => {
+								resolve(this.lookupFieldInfo.push({
+									fieldName: fld.InternalName,
+									choices: response
 								}));
-							} else if (fld.FieldTypeKind == 8) { // boolean
-								resolve(this.fieldInfo.push({
-									intName: fld.InternalName,
-									boolean: true
-								}));
-							} else 
-								resolve(null); // not a lookup field, so don't store it
-						}));
-					Promise.all(requests).then(() => {
-						// build the body from stored lookup fields, if they exist
-						newBody = { };
+							}).catch((response) => {
+								reject(response);
+							});
+						} else 
+							resolve(null); // not a lookup field, so don't store it
+					}));
+				Promise.all(requests).then(() => {
+					// build the body from stored lookup fields, if they exist
+					let nkey: string;
 
-						for (let key in body)
-							if (Array.isArray(body[key])) {
-								for (let fld of this.fields)
-									if (fld.InternalName == key) {
-										newBody[key] = {
-											__metadata: { 
-												type: fld.Choices.__metadata.type 
-											}, 
-											results: body[key]
-										};
-										break;
-									}
-							} else if (typeof body[key] == "boolean" || 
-										(typeof body[key] == "string" && body[key].search(/Y|Yes|No|N|true|false/i) == 0)) {
-								for (let fld of this.fieldInfo)
-									if (fld.intName == key)
-										if (fld.boolean)
-											if (body[key] == true || body[key].search(/Y|Yes|true/i) == 0)
-												newBody[key] = true;
-											else
-												newBody[key] = false;
+					newBody = { };
+					for (let key in body)
+						if (Array.isArray(body[key])) {  // assembling choices
+							for (let fld of this.fieldInfo)
+								if (fld.InternalName == key) {
+									newBody[key] = {
+										__metadata: { 
+											type: fld.Choices ? fld.Choices.__metadata.type : ""
+										}, 
+										results: body[key]
+									};
+									break;
+								}
+						} else if (typeof body[key] == "boolean" || 
+									(typeof body[key] == "string" && body[key].search(/Y|Yes|No|N|true|false/i) == 0)) {
+							for (let fld of this.fieldInfo)
+								if (fld.InternalName == key || new RegExp(fld.Title, "i").test(key) == true) {
+									if (fld.InternalName != (nkey = key))
+										nkey = fld.InternalName;
+									if (fld.TypeAsString == "boolean")
+										if (body[key] == true || (body[key].search && body[key].search(/Y|Yes|true/i) == 0))
+											newBody[nkey] = true;
 										else
-											newBody[key] = body[key];
-							} else if ((value = this.getLookupFieldValue(key, body[key])) == body[key])
-								newBody[key] = value; // this is the case
-							else
-								newBody[key + "Id"] = value;
-						resolve(newBody);
-					}).catch((response) => {
-						reject(response);
-					});
-				}).catch(() => {
-					reject(".getFields() called failed");
+											newBody[nkey] = false;
+									else
+										newBody[nkey] = body[key];
+								}
+						} else if ((value = this.getLookupFieldValue(key, body[key])) == body[key])
+							newBody[key] = value; // this is the case
+						else if (value != null)
+							newBody[key + "Id"] = value;
+						else
+							newBody[key] = body[key];
+					resolve(newBody);
+				}).catch((response) => {
+					reject(response);
 				});
+			}
 		});
 	}
 
@@ -602,14 +608,26 @@ class SPListREST {
 	 * 	} parameters 
 	 * @returns {Promise} HTTP Request
 	 */
-	getListItemData(parameters: {
-		itemId: number;
-		lowId?: number;
-		highId?: number;
-		[key: string]: any;
+	getListItemData(parameters?: {
+		itemId: number,
+		lowId?: number,
+		highId?: number,
+		queryOptions?: {
+			select?: string,
+			filter?: string,
+			expand?: string
+		}
 	}): Promise<any> {
 		return new Promise((resolve, reject) => {
-			let filter: string = "";
+			let filter: string = "",
+				select: string = "",
+				expand: string = "",
+				query: string = "",
+				queryOpts: {
+					select?: string,
+					filter?: string,
+					expand?: string
+				};
 
 			if (parameters && parameters.lowId)
 				filter += "Id ge " + parameters.lowId as string;
@@ -620,10 +638,23 @@ class SPListREST {
 					filter += " and ";
 			if (parameters && parameters.highId && parameters.highId > 0)
 				filter += "Id le " + parameters.highId as string;
+			if (parameters && parameters.queryOptions) {
+				queryOpts = parameters.queryOptions;
+				select = queryOpts.select ? queryOpts.select : "";
+				expand = queryOpts.expand ? queryOpts.expand : "";
+				filter = queryOpts.filter ? 
+						(filter.length > 0 ? filter + " and " + queryOpts.filter : queryOpts.filter) : filter;
+			}
+			if (filter.length > 0)
+				query += "?$filter=" + filter;
+			if (select.length > 0)
+				query = query.length > 0 ? query + "&$select=" + select : "?$select=" + select;
+			if (expand.length > 0)
+				query = query.length > 0 ? query + "&$expand=" + expand : "?$expand=" + expand;
 			SPListREST.httpRequestPromise({
 				url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/items" + 			
 						(parameters && parameters.itemId > 0 ? "(" + parameters.itemId + ")" : "") + 
-						(filter.length > 0 ? "?$filter=" + filter : "")
+						(query.length > 0 ? query : "")
 			}).then((response: any) => {
 				if (response.data.__next)
 					this.getListItemData(response.data.__next);
@@ -715,12 +746,11 @@ class SPListREST {
 	 */
 	updateListItem(parameters: {
 		itemId: number;
-		body: THttpRequestBody;
+		body: THttpRequestBody | string;
 	}) {
-		let body: THttpRequestBody | string = parameters.body;
-		
 		return new Promise((resolve, reject) => {
-			this.fixBodyForSpecialFields(body as THttpRequestBody).then((body: any) => {
+			this.fixBodyForSpecialFields(parameters.body as THttpRequestBody)
+			.then((body: any) => {
 				if (checkEntityTypeProperty(body, "item") == false)
 					body["__SetType__"] = this.listItemEntityTypeFullName;
 				body = formatRESTBody(body);
@@ -1253,7 +1283,7 @@ class SPListREST {
 			if (!parameters.fileName)
 				thisInstance.getListItemData({
 					itemId: parameters.itemId,
-					expand: "File"
+					queryOptions: { expand: "File" }
 				}).then((response: any) => {
 					parameters.fileName = response.responseJSON.d.File.Name;
 					thisInstance.continueupdateLibItemWithCheckout(parameters).then((response: any) => {

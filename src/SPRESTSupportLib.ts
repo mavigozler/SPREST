@@ -502,12 +502,12 @@ function SPListColumnCopy(
  * @function formatRESTBody -- creates a valid JSON object as string for specifying SP list item updates/creations
  * @param {object}  JsonBody -- JS object which conforms to JSON rules. Must be "field_properties" : "field_values" format
  *                    If one of the properties is "__SetType__", it will fix the "__metadata" property
+ * @return {string} stringified JSON
  */
 function formatRESTBody(JsonBody: { [key: string]: string | object } | string ): string {
-   let testString: string, testBody: object,
-
-	
-	temp: any;
+   let testString: string, 
+		testBody: object,
+		temp: any;
 
    try {
       testString = JSON.stringify(JsonBody);
@@ -515,13 +515,19 @@ function formatRESTBody(JsonBody: { [key: string]: string | object } | string ):
    } catch (e) {
       throw "The argument is not a JavaScript object with quoted properties and quoted values (JSON format)";
    }
+	// inner function to process object part
+	if (typeof JsonBody == "string")
+		return JsonBody;
+	temp = processObjectLevel(JsonBody);
+	return JSON.stringify(temp);
+
 	function processObjectLevel(
 		objPart: { [key: string]: string | object } | string
 	): { [key: string]: string | object } | string {
 		let newPart: any = {};
 
 		if (typeof objPart == "string")
-			return objPart;
+			return objPart; // already a string
       for (let property in objPart) 
 			if (property == "__SetType__")
 				newPart["__metadata"] = { "type" : objPart[property] };
@@ -536,8 +542,6 @@ function formatRESTBody(JsonBody: { [key: string]: string | object } | string ):
 				newPart[property] = objPart[property];
 		return newPart;
 	}
-	temp = processObjectLevel(JsonBody);
-	return temp;
 }
 
 function checkEntityTypeProperty(body: object, typeCheck: string) {
@@ -735,32 +739,32 @@ function constructQueryParameters(parameters: {[key:string]: any | any[] }): str
 
 /**
 * @function setCheckedInput -- will set a radio object programmatically
-* @param {HtmlRadioInputDomNode} inputObj   the INPUT DOM node that represents the set of radio values
+* @param {HTMLInputElement | RadioNodeList} inputObj   The settable DOM object can be 
+		1) Radio controls under one form name
+		2) Array/set of checkboxes 
 * @param {primitive value} value -- can be numeric, string or null. Using 'null' effectively unsets/clears any
 *        radio selection
 & @returns boolean  true if value set/utilized, false otherwise
 */
 function setCheckedInput(
-	inputObj: HTMLInputElement & RadioNodeList, 
-	value: string | string[] | null
-): boolean {
-	if (inputObj.length && value != null && Array.isArray(value) == true) {  // a checked list
-		if (value.length && value.length > 0) {
-			for (let val of value)
-				for (let cbox of inputObj)
-					if ((cbox as HTMLInputElement).value == val)
-						(cbox as HTMLInputElement).checked = true;
-		} else 
-			for (let cbox of inputObj)
-			if ((cbox as HTMLInputElement).value == value) {
-				(cbox as HTMLInputElement).checked = true;
-				return true;
-			}
-	} else if (value != null) {
-		inputObj.value = value as string;
-		return true;
-	}
-	return false;
+	inputObj: HTMLInputElement | RadioNodeList, 
+	value: string
+): void {
+	let radioType = inputObj as RadioNodeList,
+		node: Node,
+		idx: HTMLInputElement;
+
+	if (radioType.length && (radioType[0] as HTMLInputElement).type == "radio") { // radio button
+		for (node of radioType) {
+			idx = node as HTMLInputElement;
+			if (idx.value == value)
+				idx.checked = true;
+			else
+				idx.checked = false;
+		}
+	} else // inputObj.type == "checkbox"
+		(inputObj as HTMLInputElement).checked = typeof value == "boolean" ? value : 
+			value == "true" ? true : value == "false" || value == null ? false : (inputObj as HTMLInputElement).checked;
 }
 
 /**
