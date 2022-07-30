@@ -17,28 +17,28 @@ class SPListREST {
 	protocol: string;
 	server: string;
 	site: string;
-	apiPrefix: string;
-	listName: string;
-	listGuid: string;
-	baseUrl: string;
-	serverRelativeUrl: string;
-	creationDate: Date;
-	baseTemplate: string;
-	allowContentTypes: boolean;
-	itemCount: number;
-	listItemEntityTypeFullName: string;
-	rootFolder: string;
-	contentTypes: object;
-	listIds: number[];
-	fields: any[];
-	fieldInfo: any[];
-	lookupFieldInfo: TLookupFieldInfo[];
-	lookupInfoCached: boolean;
-	linkToDocumentContentTypeId: string;
-	currentListIdIndex: number;
+	apiPrefix: string = "";
+	listName: string = "";
+	listGuid: string = "";
+	baseUrl: string = "";
+	serverRelativeUrl: string = "";
+	creationDate: Date = new Date(0);
+	baseTemplate: string = "";
+	allowContentTypes: boolean = Boolean(null);
+	itemCount: number = -1;
+	listItemEntityTypeFullName: string = "";
+	rootFolder: string = "";
+	contentTypes: object = {};
+	listIds: number[] = [];
+	fields: any[] = [];
+	fieldInfo: any[] = [];
+	lookupFieldInfo: TLookupFieldInfo[] = [];
+	lookupInfoCached: boolean = Boolean(null);
+	linkToDocumentContentTypeId: string = "";
+	currentListIdIndex: number = -1;
 	setup: TListSetup;
-	sitePedigree: TSiteInfo;
-	arrayPedigree: TSiteInfo[];
+	sitePedigree: TSiteInfo = {};
+	arrayPedigree: TSiteInfo[] = [];
 
 	static stdHeaders: THttpRequestHeaders = {
 		"Accept": "application/json;odata=verbose",
@@ -75,7 +75,6 @@ class SPListREST {
 		this.site = setup.site;
 		if (setup.site.charAt(0) != "/")
 			this.site = "/" + this.site;
-		this.apiPrefix = this.protocol + this.server + this.site + "/_api";
 		if (setup.listName)
 			this.listName = setup.listName;
 		else if (setup.listGuid)

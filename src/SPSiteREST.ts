@@ -9,21 +9,21 @@ class SPSiteREST {
 	server: string;
 	sitePath: string;
 	apiPrefix: string;
-	id: string;
-	serverRelativeUrl: string;
-	isHubSite: boolean;
-	webId: string;
-	webGuid: string;
-	creationDate: Date;
-	siteName: string;
-	homePage: string;
-	siteLogoUrl: string;
-	template: string;
+	id: string = "";
+	serverRelativeUrl: string = "";
+	isHubSite: boolean = Boolean();
+	webId: string = "";
+	webGuid: string = "";
+	creationDate: Date = new Date(0);
+	siteName: string = "";
+	homePage: string = "";
+	siteLogoUrl: string = "";
+	template: string = "";
 	static stdHeaders: THttpRequestHeaders = {
 		"Accept": "application/json;odata=verbose",
 		"Content-Type": "application/json;odata=verbose"
 	};
-	arrayPedigree: TSiteInfo[];
+	arrayPedigree: TSiteInfo[] = [];
 
 	/**
 	 * @constructor SPSiteREST -- sets up properties and methods instance to describe a SharePoint site

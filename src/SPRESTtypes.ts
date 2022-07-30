@@ -68,7 +68,7 @@ type THttpRequestHeaders = {
 	"IF-MATCH"?: "*"; // can also use etag
 	"X-HTTP-METHOD"?: "MERGE" | "DELETE";
 	"X-RequestDigest"?: string;
-	[key:string]: string;
+	[key: string]: any;
 };
 
 type THttpRequestParams = ({

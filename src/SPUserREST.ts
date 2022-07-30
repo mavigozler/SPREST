@@ -42,17 +42,17 @@ How to get info on all users through siteuserinfolist:
  */
  class UserInfo {
 	search: TUserSearch;
-	userId: number; // numeric SP ID
-	loginName: string; //i:0#.w|domain\\user name
-	title: string; // "<last name>, <first name> <org>
-	emailAddress: string;
-	userName: string;
-	firstName: string;
-	lastName: string;
-	workPhone: string;
-	created: Date;
-	modified: Date;
-	jobTitle: string;
+	userId: number = -1; // numeric SP ID
+	loginName: string = ""; //i:0#.w|domain\\user name
+	title: string = ""; // "<last name>, <first name> <org>
+	emailAddress: string = "";
+	userName: string = "";
+	firstName: string = "";
+	lastName: string = "";
+	workPhone: string = "";
+	created: Date = new Date(0);
+	modified: Date = new Date(0);
+	jobTitle: string = "";
 	dataComplete: boolean = false;
 	//        storeData = storeDataEx.bind(null, this);
 	constructor(search: TUserSearch) {
