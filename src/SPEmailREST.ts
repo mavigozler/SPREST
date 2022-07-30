@@ -32,8 +32,6 @@ class SPUtilityEmailService {
         site: string;
     }) {
         this.server = parameters.server;
-        if (this.server.search(/^https?:\/\//) < 0)
-            this.server += "https://" + this.server;
         this.site = parameters.site;
     }
 
@@ -55,19 +53,19 @@ class SPUtilityEmailService {
      */
     sendEmail (headers: IEmailHeaders) : Promise<any> {
         return new Promise((resolve, reject) => {
-            let To: string, 
-            CC: string | null, 
-            BCC: string | null, 
-            From: string, 
-            Subject: string, 
-            Body:string, 
+            let To: string,
+            CC: string | null,
+            BCC: string | null,
+            From: string,
+            Subject: string,
+            Body:string,
             uri: string = this.server;
 
-            if (!headers.To) 
+            if (!headers.To)
                 throw "Object arg to SPUtilityEmailService.sendEmail() method must include .To: property";
-            if (!headers.Subject) 
+            if (!headers.Subject)
                 throw "Object arg to SPUtilityEmailService.sendEmail() method must include defined .Subject: property";
-            if (!headers.Body) 
+            if (!headers.Body)
                 throw "Object arg to SPUtilityEmailService.sendEmail() method must include defined .Body: property";
             window.onerror = null;
             To = this.structureMultipleAddresses(headers.To);
@@ -89,7 +87,7 @@ class SPUtilityEmailService {
             if (this.site && this.site.length > 0)
                 uri += "/" + this.site;
             $.ajax({
-                url: uri + "/_api/contextinfo",
+                url: "https://" + uri + "/_api/contextinfo",
                 method: "POST",
                 headers: {
                     "Accept": "application/json;odata=verbose"
@@ -100,7 +98,7 @@ class SPUtilityEmailService {
                         // the actual transmission
                         digValue = responseJSON.d.GetContextWebInformation.FormDigestValue;
                     $.ajax({
-                        url: uri + "/_api/SP.Utilities.Utility.SendEmail",
+                        url: "https://" + uri + "/_api/SP.Utilities.Utility.SendEmail",
                         method: "POST",
                         headers: {
                             "Accept": "application/json;odata=verbose",
@@ -108,26 +106,28 @@ class SPUtilityEmailService {
                         },
                         data: JSON.stringify({ properties : {
                                 __metadata: { type: "SP.Utilities.EmailProperties" },
-                                To: { results : [  To  ] }, 
+                                To: { results : [  To  ] },
                                 CC: { results : [  CC  ] },
                                 BCC: { results : [ BCC ] },
                                 From: From,
                                 Subject: Subject,
                                 Body: Body
-                            } 
+                            }
                         }),
                         contentType: "application/json;odata=verbose",
                         success: (data: any, message: string, reqObj: JQueryXHR) => {
                             resolve(reqObj.status);
+                            console.log("Email success");
                         },
                         error: (reqObj: any) => {
                             reject(reqObj);
+                            console.log("Email failure: " + "\n  HTTP Status: " + reqObj.status + "\n  Message: " + reqObj.responseJSON.error.message.value);
                         }
                     });
                 },
                 error: function(responseObj: any) {
                     // this = request object
-                    alert("ERROR!\n\n" + "Contact the developer with this error message below\n\n" + "URL: " + this.url + "\n" + "Message: " + 
+                    alert("ERROR!\n\n" + "Contact the developer with this error message below\n\n" + "URL: " + this.url + "\n" + "Message: " +
                             responseObj.name + ": " + responseObj.message);
                 }
             });
@@ -157,8 +157,8 @@ function emailDeveloper(parameters : {
     head?: string;
 }): Promise<any> {
     return new Promise((resolve, reject) => {
-        let emailService: SPUtilityEmailService, 
-        bodyStart: string, 
+        let emailService: SPUtilityEmailService,
+        bodyStart: string,
         bodyEnd: string;
 
         if (!parameters.server) throw "Cannot emailDeveloper() with having a defined server name";
@@ -208,7 +208,7 @@ function emailUser(parameters: {
 /**/
 /*
 function emailHttpErrors(restRequest, config, itemId): void {
-    var emailService, body, prop, 
+    var emailService, body, prop,
                 headers = restRequest.getRequestHeaders();
     if (config == "list") config = "listItemCommon()";
     else if (config == "library") config = "libraryItemCommon()";

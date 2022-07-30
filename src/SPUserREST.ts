@@ -1,4 +1,4 @@
-"use strict"; 
+"use strict";
 
 /*  SP User via REST
 
@@ -62,10 +62,10 @@ How to get info on all users through siteuserinfolist:
 		if (search.id)
 			this.search.userId = search.id;
 	}
-	
+
 	populateUserData (userRestReqObj: SPUserREST): Promise<any> {
 		return new Promise((resolve, reject) => {
-			let type: number, 
+			let type: number,
 				args: {
 					userId?: number;
 					lastName?: string;
@@ -253,22 +253,6 @@ How to get info on all users through siteuserinfolist:
 	};
 }
 
-/**
- * @function getSharePointCurrentUserInfo -- return infor from SP server about current user
- * @param parameters the server hostname and the site 
- * @returns Promise with response being several parameters
- *    email
- * 	userId
- * 	loginName
- * 	title
- * 	jobTitle
- * 	lastName
- * 	firstName
- * 	workPhone
- * 	userName
- * 	created
- * 	modified
- */
 function getSharePointCurrentUserInfo(parameters: {
 	server: string;
 	site: string;
@@ -326,7 +310,7 @@ function getAllSharePointUsersInfo(parameters: {
 	return new Promise((resolve, reject) => {
 		$.ajax({
 			method: "GET",
-			url: parameters.url ? parameters.url : "https://" + parameters.server + parameters.site + 
+			url: parameters.url ? parameters.url : "https://" + parameters.server + parameters.site +
 					"/_api/web/siteuserinfolist/items" +
 					(parameters.query ? "?" + parameters.query : ""),
 			headers: {

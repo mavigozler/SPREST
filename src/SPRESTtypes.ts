@@ -40,8 +40,8 @@ type TSPResponseDataProperties = {
 	WebTemplate?: string;
 };
 
-type TSPResponseData = { 
-	d?: { 
+type TSPResponseData = {
+	d?: {
 		results?: TSPResponseDataProperties[],
 		GetContextWebInformation?: {
 			FormDigestValue: string;
@@ -59,7 +59,7 @@ type TErrorCallback = (reqObj: JQueryXHR, status?: string, err?: string) => void
 
 type THttpRequestProtocol = "https" | "http" | "https://" | "http://";
 
-type THttpRequestMethods = "GET" | "POST" | "PUT" | "PATCH" | "HEAD" | "OPTIONS" | 
+type THttpRequestMethods = "GET" | "POST" | "PUT" | "PATCH" | "HEAD" | "OPTIONS" |
 		"DELETE" | "TRACE" | "CONNECT";
 
 type THttpRequestHeaders = {
@@ -150,7 +150,7 @@ type TListSetup = IListSetupWithName | IListSetupWithGuid;
 type TLookupFieldInfo = {
 	fieldName: string,
 	choices: {
-		id: string;
+		id: number;
 		value: string;
 	}[] | null;
 };

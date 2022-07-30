@@ -23,6 +23,7 @@ class SPSiteREST {
 		"Accept": "application/json;odata=verbose",
 		"Content-Type": "application/json;odata=verbose"
 	};
+	arrayPedigree: TSiteInfo[];
 
 	/**
 	 * @constructor SPSiteREST -- sets up properties and methods instance to describe a SharePoint site
@@ -55,7 +56,7 @@ class SPSiteREST {
 			this.sitePath = "/" + this.sitePath;
 		this.apiPrefix = this.server + this.sitePath + "/_api";
 	}
-	
+
 	/**
 	 * @method create -- sets many list characteristics whose data is required
 	 * 	by asynchronous request
@@ -111,11 +112,11 @@ class SPSiteREST {
 				headers: {...SPSiteREST.stdHeaders},
 				success: function (data) {
 						 let headers: THttpRequestHeaders | undefined = elements.headers;
-	
+
 						 if (headers) {
 							  headers["Content-Type"] = "application/json;odata=verbose";
 							  headers["Accept"] = "application/json;odata=verbose";
-						 } else 
+						 } else
 							  headers = {...SPSiteREST.stdHeaders};
 					headers["X-RequestDigest"] = data.d.FormDigestValue ? data.d.FormDigestValue :
 						data.d.GetContextWebInformation.FormDigestValue;
@@ -152,7 +153,7 @@ class SPSiteREST {
 					if (data.d && data.__next)
 						RequestAgain(
 							elements,
-							data.__next, 
+							data.__next,
 							data.results!
 						).then((response) => {
 							elements.successCallback!(response);
@@ -188,7 +189,7 @@ class SPSiteREST {
 	}
 
 	/**
-	 * 
+	 *
 	 * @param {*} parameters -- object which may contain select, filter, expand properties
 	 */
 	getProperties(parameters?: any) {
@@ -197,7 +198,7 @@ class SPSiteREST {
 		});
 	}
 
-	getSiteProperties(parameters?: any) { 
+	getSiteProperties(parameters?: any) {
 		return this.getProperties(parameters);
 	}
 
@@ -219,7 +220,7 @@ class SPSiteREST {
 				url: this.apiPrefix + "/web/webinfos",
 				method: "GET",
 				successCallback: (data: TSPResponseData) => {
-					let sites: TSiteInfo[] = [ ], 
+					let sites: TSiteInfo[] = [ ],
 						results = data.d!.results;
 
 					for (let result of results!)
@@ -254,80 +255,50 @@ class SPSiteREST {
 		});
 	}
 
-	getSitePedigree(siteUrl: string | null): Promise<any> {
-		let pedigree: TSiteInfo = {}, 
-			siteInfo: TSiteInfo = {};
-
-		if (!siteUrl) {
-			siteInfo.server = this.server;
-			siteInfo.serverRelativeUrl = this.serverRelativeUrl;
-		} else {
-			let parsedUrl: TParsedURL | null = ParseSPUrl(siteUrl);
-
-			if (parsedUrl == null)
-				throw "Parameter 'siteUrl' was not a parseable SharePoint URL";
-			siteInfo.server = parsedUrl.server;
-			siteInfo.serverRelativeUrl = parsedUrl.siteFullPath;
-		}
-
+	getSitePedigree(siteUrl: string | null): Promise<{pedigree: TSiteInfo; arrayPedigree: TSiteInfo[]}> {
 		return new Promise((resolve, reject) => {
-			let repeatGetParent = (siteInfo: TSiteInfo) => {
-				this.getParentWeb(siteInfo.server! + siteInfo.serverRelativeUrl).then((ParentWeb) => {
-					if (ParentWeb) {  // != null
-						let siteParent: TSiteInfo = {};
-						ParentWeb = ParentWeb.data.d;
-						siteParent.name = ParentWeb.Title;
-						siteParent.server = siteInfo.server;
-						siteParent.serverRelativeUrl = ParentWeb.ServerRelativeUrl;
-						siteParent.id = ParentWeb.Id;
-						siteParent.template = ParentWeb.WebTemplate;
-						siteInfo.parent = siteParent;
-						siteParent.children = [];
-						siteParent.children.push(siteInfo);
-						repeatGetParent(siteParent);
-					} else {
-						fillOutPedigree(siteInfo);  // use the last site
-						resolve(pedigree);
-					}
-				}).catch((response) => {
-					reject(response);
-				});
-			},
-			fillOutPedigree = (parentWeb: TSiteInfo) => {
-				let subSite: SPSiteREST;
-				
-				if (!parentWeb)
-					throw "fillOutPedigree():  parameter 'parentWeb' is not defined";
-				subSite = new SPSiteREST({
-						server: siteInfo.server as string,
-						site: parentWeb.serverRelativeUrl as string
-					});
-				subSite.init().then(() => {
-					subSite.getSubsites().then((webInfos: any) => {
-						if (typeof webInfos == "undefined")
-							reject("Promise.success() returned nothing");
-						else 
-							for (let webinfo of webInfos) {
-								if (typeof parentWeb.children == "undefined")
-									parentWeb.children = [];
-								parentWeb.children.push({
-									name: webinfo.Title,
-									server: parentWeb.server,
-									serverRelativeUrl: webinfo.ServerRelativeUrl,
-									id: webinfo.Id,
-									template: webinfo.WebTemplate,
-									parent: parentWeb,
-									children: []
-								});
-								fillOutPedigree(webinfo);
-							}
-					}).catch((response) => {
-						reject(response);
-					});
-				});
-			};
+			let pedigree: TSiteInfo = {},
 
+					siteInfo: TSiteInfo = {},
+					repeatGetParent = (siteInfo: TSiteInfo) => {
+						this.getParentWeb(siteInfo.server! + siteInfo.serverRelativeUrl).then((ParentWeb) => {
+							if (ParentWeb) {  // != null
+								let siteParent: TSiteInfo = {};
+								ParentWeb = ParentWeb.data.d;
+								siteParent.name = ParentWeb.Title;
+								siteParent.server = siteInfo.server;
+								siteParent.serverRelativeUrl = ParentWeb.ServerRelativeUrl;
+								siteParent.id = ParentWeb.Id;
+								siteParent.template = ParentWeb.WebTemplate;
+								siteInfo.parent = siteParent;
+								siteParent.children = [];
+								siteParent.children.push(siteInfo);
+								repeatGetParent(siteParent);
+							} else {
+								this.fillOutPedigree(siteInfo).then((response) => {
+									resolve({pedigree: pedigree, arrayPedigree: this.arrayPedigree});
+								}).catch((response) => {
+									reject(response);
+								});;  // use the last site
+							}
+						}).catch((response) => {
+							reject(response);
+						});
+					};
+
+			if (!siteUrl) {
+				siteInfo.server = this.server;
+				siteInfo.serverRelativeUrl = this.serverRelativeUrl;
+			} else {
+				let parsedUrl: TParsedURL | null = ParseSPUrl(siteUrl);
+
+				if (parsedUrl == null)
+					throw "Parameter 'siteUrl' was not a parseable SharePoint URL";
+				siteInfo.server = parsedUrl.server;
+				siteInfo.serverRelativeUrl = parsedUrl.siteFullPath;
+			}
 			pedigree.referenceSite = {
+			 ///pedigree.referenceSite = {
 				name: null,
 				server: siteInfo.server,
 				serverRelativeUrl: this.serverRelativeUrl,
@@ -336,7 +307,60 @@ class SPSiteREST {
 				parent: null,
 				children: []
 			};
+			this.arrayPedigree = [];
+			this.arrayPedigree.push(pedigree.referenceSite);
+			//repeatGetParent(pedigree.referenceSite!);
 			repeatGetParent(pedigree.referenceSite!);
+		});
+	}
+
+	fillOutPedigree (parentWeb: TSiteInfo): Promise<any> {
+		return new Promise((resolve, reject) => {
+			let subSite: SPSiteREST;
+
+			if (!parentWeb)
+				throw "fillOutPedigree():  parameter 'parentWeb' is not defined";
+			subSite = new SPSiteREST({
+					server: this.server as string,
+					site: parentWeb.serverRelativeUrl as string
+				});
+			subSite.init().then(() => {
+				subSite.getSubsites().then((webInfos: any) => {
+					if (typeof webInfos == "undefined")
+						reject("Promise.success() returned nothing");
+					else {
+						if (typeof parentWeb.children == "undefined")
+							parentWeb.children = [];
+						if (webInfos.length > 0) {
+							let idx: number,
+									webInfoRequests: Promise<any>[] = [];
+
+							for (let webinfo of webInfos) {
+								idx = parentWeb.children.push({
+									name: webinfo.name,
+									server: parentWeb.server,
+									serverRelativeUrl: webinfo.serverRelativeUrl,
+									id: webinfo.id,
+									template: webinfo.template,
+									parent: parentWeb,
+									children: []
+								}) - 1;
+								this.arrayPedigree.push(parentWeb.children[idx]);
+								webInfoRequests.push(this.fillOutPedigree(parentWeb.children[idx]));
+							}
+
+							Promise.all(webInfoRequests).then((response) => {
+								resolve(true);
+							}).catch((response) => {
+								reject(response);
+							});
+						} else
+							resolve(true);
+					}
+				}).catch((response) => {
+					reject(response);
+				});
+			});
 		});
 	}
 
@@ -359,9 +383,9 @@ class SPSiteREST {
 	}
 
 	/**
-	 * 
+	 *
 	 * @param {*} parameters -- need to control these!
-	 * @returns 
+	 * @returns
 	 */
 	createList(parameters: {body: THttpRequestBody}) {
 		let body: THttpRequestBody | string = parameters.body;
@@ -376,11 +400,11 @@ class SPSiteREST {
 			body: body
 		});
 	}
-	
+
 	/**
-	 * @method updateListByMerge 
+	 * @method updateListByMerge
 	 * @param {object} parameters -- need a 'Title' parameter
-	 * @returns 
+	 * @returns
 	 */
 	updateListByMerge(parameters: {body: THttpRequestBody, listGuid: string}) {
 		let body: THttpRequestBody | string = parameters.body;
@@ -402,12 +426,12 @@ class SPSiteREST {
 
 	deleteList(parameters: {id?: string, guid?: string}) {
 		let id = parameters.id ?? parameters.guid;
-		
+
 		if (!id)
 			throw "List deletion requires an 'id' or 'guid' parameter for the list to be deleted.";
 		return SPSiteREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists" + 
+			url: this.apiPrefix + "/web/lists" +
 					"(guid'" + id + "')",
 			method: "POST",
 			headers: {
@@ -418,12 +442,12 @@ class SPSiteREST {
 	}
 
 	makeLibCopyWithItems(
-		sourceLibName: string, 
-		destLibSitePath: string, 
+		sourceLibName: string,
+		destLibSitePath: string,
 		destLibName: string,
 		itemCopyCount?: number
 	): Promise<any> {
-		// steps: (1) get source lib info on fields, 
+		// steps: (1) get source lib info on fields,
 		//  (2) create dest list/lib, then its fields, then views, try content types
 		//  (3) copy the items
 		return new Promise((resolve, reject) => {
@@ -477,8 +501,8 @@ class SPSiteREST {
 									reject(response);
 								}); */
 							}).catch((response: any) => {
-								reject(response); 
-							}); 
+								reject(response);
+							});
 						else {
 							reject(response);
 						}
@@ -490,11 +514,11 @@ class SPSiteREST {
 	}
 
 	copyFields(
-		sourceLib: string | SPListREST, 
+		sourceLib: string | SPListREST,
 		destLib: string | SPListREST
 	): Promise<any> {
 		return new Promise((resolve, reject) => {
-			let fieldDefs: {[key:string]: any}[] = [ ], 
+			let fieldDefs: {[key:string]: any}[] = [ ],
 					fieldExclusions: {[key:string]: boolean | string[] | number[] } = {
 						CanBeDeleted: false,
 						ReadOnlyField: true,
@@ -517,8 +541,8 @@ class SPSiteREST {
 					for (let property in fieldExclusions) {
 						if (Array.isArray(fieldExclusions[property]) == true)
 							for (let elem of fieldExclusions[property] as (string[] | number[])) {
-								if (field[property] == elem || typeof elem == "string" && 
-											elem.charAt(0) == "^" && 
+								if (field[property] == elem || typeof elem == "string" &&
+											elem.charAt(0) == "^" &&
 											new RegExp(elem.substring(1)).test(field[property]) == true) {
 									field = null;
 									break;
@@ -560,7 +584,7 @@ class SPSiteREST {
 	}
 
 	copyFolders(
-		sourceLib: string | SPListREST, 
+		sourceLib: string | SPListREST,
 		destLib: string | SPListREST
 	): Promise<any> {
 		return new Promise((resolve, reject) => {
@@ -576,11 +600,11 @@ class SPSiteREST {
 				expand: "Folder",
 				select: "Folder/Name,Folder/ServerRelativeUrl"
 			}).then((response: any) => {
-				let folders: any[] = [], 
+				let folders: any[] = [],
 						results: any[] = response.data ? response.data : response,
 						requests: IBatchHTTPRequestForm[] = [],
 						returnvalue: string = "";
-	
+
 				for (let item of results)
 					if (item.FileSystemObjectType == 1) { // folder
 						item.folderLevel = (item.ServerRelativeUrl.match(/\//g) || []).length;
@@ -650,9 +674,9 @@ class SPSiteREST {
 				reject("Destination library not found in site: must create library before copying fields to it.");
 			destLib.init().then((response) => {
 			(sourceLib as SPListREST).getAllListItems().then((response: any) => {
-				let parts: RegExpMatchArray, 
+				let parts: RegExpMatchArray,
 					requests: {sourceUrl: string; destUrl: string; fileName: string}[] = [];
-				
+
 				for (let item of response.data)
 					if (item.File.ServerRelativeUrl) {
 						parts = item.File.ServerRelativeUrl.match(/^(.*\/)([^\/]+)$/);
@@ -676,7 +700,7 @@ class SPSiteREST {
 					resolve(response);
 				}).catch((response) => {
 					reject(response);
-				}); */			
+				}); */
 			});
 			});
 			});
@@ -684,15 +708,15 @@ class SPSiteREST {
 	}
 
 	workRequests(requests: {
-		sourceUrl: string; 
-		destUrl: string; 
+		sourceUrl: string;
+		destUrl: string;
 		fileName: string
 	}[], index: number): Promise<any> {
 		return new Promise((resolve, reject) => {
 			$.ajax({
-				url: this.apiPrefix + "/web/getFileByServerRelativeUrl('" + 
-					requests[index].sourceUrl + "')/copyto(strnewurl='" + 
-					requests[index].destUrl + "/" + 
+				url: this.apiPrefix + "/web/getFileByServerRelativeUrl('" +
+					requests[index].sourceUrl + "')/copyto(strnewurl='" +
+					requests[index].destUrl + "/" +
 					requests[index].fileName + "',boverwrite=false)",
 				method: "POST",
 				success: (data) => {
@@ -709,7 +733,7 @@ class SPSiteREST {
 	}
 
 	copyMetadata(
-		sourceLib: string | SPListREST, 
+		sourceLib: string | SPListREST,
 		destLib: string | SPListREST
 	): Promise<any> {
 		return new Promise((resolve, reject) => {
@@ -719,7 +743,7 @@ class SPSiteREST {
 	}
 
 	copyViews(
-		sourceLib: string | SPListREST, 
+		sourceLib: string | SPListREST,
 		destLib: string | SPListREST
 	): Promise<any> {
 		return new Promise((resolve, reject) => {
@@ -741,7 +765,7 @@ class SPSiteREST {
 				reject("Destination library not found in site: must create library before copying fields to it.");
 			(sourceLib as SPListREST).getView().then((response) => {
 				let viewDefs = [ ];
-	
+
 				for (let sourceView of response.data.d.results)
 					viewDefs.push({
 						"Title": sourceView.Title,
@@ -759,7 +783,7 @@ class SPSiteREST {
 				});
 			}).catch((response) => {
 				reject(response);
-			}); 
+			});
 		});
 	}
 }
