@@ -148,7 +148,8 @@ interface IListSetupWithGuid extends IListSetupMinimal {
 type TListSetup = IListSetupWithName | IListSetupWithGuid;
 
 type TLookupFieldInfo = {
-	fieldName: string,
+	fieldDisplayName: string,
+	fieldInternalName: string;
 	choices: {
 		id: number;
 		value: string;

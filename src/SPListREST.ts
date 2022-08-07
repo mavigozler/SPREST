@@ -17,7 +17,7 @@ class SPListREST {
 	protocol: string;
 	server: string;
 	site: string;
-	apiPrefix: string = "";
+	apiPrefix: string;
 	listName: string = "";
 	listGuid: string = "";
 	baseUrl: string = "";
@@ -84,6 +84,7 @@ class SPListREST {
 		if (!(this.listName || this.listGuid))
 			throw "Neither a list name or list GUID were provided to identify a list";
 		this.setup = setup;
+		this.apiPrefix = this.protocol + this.server + this.site + "/_api";
 /*
 		if (setup.linkToDocumentContentTypeId)
 			this.linkToDocumentContentTypeId = setup.linkToDocumentContentTypeId; */
@@ -202,13 +203,14 @@ class SPListREST {
 									if (datum[fld.Title] != null)
 										break found1;
 							idx = this.lookupFieldInfo.push({
-								fieldName: fld.Title, // this needs work
+								fieldDisplayName: fld.Title,
+								fieldInternalName: fld.InternalName,
 								choices: null
 							}) - 1;
 							for (let fldVal of data)
 								choices.push({
 									id: fldVal.Id,
-									value: fldVal[fld.Title]
+									value: fldVal[fld.InternalName]
 								});
 							this.lookupFieldInfo[idx].choices = choices;
 						}
@@ -338,7 +340,7 @@ class SPListREST {
 	 */
 	getLookupFieldValue(fieldName: string, fieldValue: string): number | null {
 		for (let info of this.lookupFieldInfo)
-			if (info.fieldName == fieldName)
+			if (info.fieldDisplayName == fieldName)
 				for (let i: number = 0; i < info.choices!.length; i++)
 					if (fieldValue == info.choices![i].value)
 						return info.choices![i].id;
@@ -391,7 +393,8 @@ class SPListREST {
 									LookupField: fld.LookupField
 								}).then((response: any) => {
 									this.lookupFieldInfo.push({
-										fieldName: fld.InternalName,
+										fieldDisplayName: fld.Title,
+										fieldInternalName: fld.InternalName,
 										choices: response
 									});
 								}).catch((response) => {
