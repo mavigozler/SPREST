@@ -40,7 +40,7 @@ How to get info on all users through siteuserinfolist:
  *                                      {.lastName: "<last-name>", .firstName: "<first-name>" }
  *          {.debugging: true...sets for debugger}
  */
- class UserInfo {
+ export class UserInfo {
 	search: TUserSearch;
 	userId: number = -1; // numeric SP ID
 	loginName: string = ""; //i:0#.w|domain\\user name
@@ -147,7 +147,7 @@ How to get info on all users through siteuserinfolist:
  *        .site {string} [optional]  site within server site collection, empty string is default
  *        .debugging {boolean}  if true, set to debugging
  */
- class SPUserREST {
+export class SPUserREST {
 	server: string;
 	site: string;
 	constructor(parameters: {
@@ -253,7 +253,7 @@ How to get info on all users through siteuserinfolist:
 	};
 }
 
-function getSharePointCurrentUserInfo(parameters: {
+export function getSharePointCurrentUserInfo(parameters: {
 	server: string;
 	site: string;
 }): Promise<any> {
@@ -271,7 +271,7 @@ function getSharePointCurrentUserInfo(parameters: {
 	});
 }
 
-function getSharePointUserInfo(parameters: {
+export function getSharePointUserInfo(parameters: {
 	server: string;
 	site: string;
 	userId: number;
@@ -301,7 +301,7 @@ function getSharePointUserInfo(parameters: {
 }
 
 let CollectedResults: any[];
-function getAllSharePointUsersInfo(parameters: {
+export function getAllSharePointUsersInfo(parameters: {
 	url?: string;
 	server?: string;
 	site?: string;

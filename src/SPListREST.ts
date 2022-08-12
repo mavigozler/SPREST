@@ -13,7 +13,7 @@
 /**
  * @class SPListREST  -- constructor for interface to making REST request for SP Lists
  */
-class SPListREST {
+export class SPListREST {
 	protocol: string;
 	server: string;
 	site: string;

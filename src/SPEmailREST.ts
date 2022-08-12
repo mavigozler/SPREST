@@ -23,7 +23,7 @@
  *           to be separated by a SEMI-COLON!
  */
 
-class SPUtilityEmailService {
+export class SPUtilityEmailService {
     server: string;
     site: string;
 
@@ -145,7 +145,7 @@ class SPUtilityEmailService {
 //   .To : To addressee; optional if the global constant
 //           DEVELOPER_MAIL_ADDRESS is defined with proper email address
 
-function emailDeveloper(parameters : {
+export function emailDeveloper(parameters : {
     server: string;
     site: string;
     errorObj?: object;

@@ -1,11 +1,11 @@
 "use strict";
 
 /**
- * 
+ *
  * @class  representing parameters to establish interface with a site
  *             {server: name of location.host, site: path to site}
  */
-class SPSearchREST {
+export class SPSearchREST {
 	server: string;
 	apiPrefix: string;
 	static stdHeaders: THttpRequestHeaders = {
@@ -29,11 +29,11 @@ class SPSearchREST {
 				headers: {...SPSearchREST.stdHeaders},
 				success: function (data: any) {
 						 let headers: THttpRequestHeaders = elements.headers as THttpRequestHeaders;
-	
+
 						 if (elements.headers) {
 							  headers["Content-Type"] = "application/json;odata=verbose";
 							  headers["Accept"] = "application/json;odata=verbose";
-						 } else 
+						 } else
 							  headers = {...SPSearchREST.stdHeaders};
 					headers["X-RequestDigest"] = data.d.FormDigestValue ? data.d.FormDigestValue :
 						data.d.GetContextWebInformation.FormDigestValue;
@@ -70,7 +70,7 @@ class SPSearchREST {
 					if (data.d && data.__next)
 						RequestAgain(
 							elements,
-							data.__next, 
+							data.__next,
 							data.results!
 						).then((response) => {
 							elements.successCallback!(response);
@@ -110,7 +110,7 @@ class SPSearchREST {
 		querytext?: string;
 	}) {
       let querytext = "";
-      
+
       if (parameters.query)
          querytext = "?querytext='" + parameters.query + "'";
       else if (parameters.querytext)

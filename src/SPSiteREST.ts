@@ -5,7 +5,7 @@
 /**
  * @class SPSiteREST
  */
-class SPSiteREST {
+export class SPSiteREST {
 	server: string;
 	sitePath: string;
 	apiPrefix: string;

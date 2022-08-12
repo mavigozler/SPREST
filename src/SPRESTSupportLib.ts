@@ -10,7 +10,7 @@ const SPstdHeaders: THttpRequestHeaders = {
 let SelectAllCheckboxes: string, // defined below
 	UnselectAllCheckboxes: string;
 
-class SPServerREST {
+export class SPServerREST {
 	URL: string;
 	apiPrefix: string;
 
@@ -147,7 +147,7 @@ class SPServerREST {
 	};
 }
 
-const MAX_REQUESTS = 500;
+export const MAX_REQUESTS = 500;
 
 /**
  * @function batchRequestingQueue -- when requests are too large in number (> MAX_REQUESTS), the batching
@@ -164,7 +164,7 @@ const MAX_REQUESTS = 500;
  *       url: string -- the valid REST URL to a SP resource
  *       method?: httpRequestMethods -- valid HTTP protocol verb in the request
  */
-function batchRequestingQueue(
+export function batchRequestingQueue(
 		elements: IBatchHTTPRequestParams,
 		allRequests: IBatchHTTPRequestForm[]
 ): Promise<any> {
@@ -192,7 +192,7 @@ function batchRequestingQueue(
 	});
 }
 
-function CreateUUID():string {
+export function CreateUUID():string {
 	return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
 		 let r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
 
@@ -546,7 +546,7 @@ function checkEntityTypeProperty(body: object, typeCheck: string) {
 				parsed after the query identifier character '?'
  */
 
-function ParseSPUrl (url: string): TParsedURL | null {
+export function ParseSPUrl (url: string): TParsedURL | null {
 	const urlRE = /(https?:\/\/[^\/]+)|(\/[^\/\?]+)/g;
 	let index: number,
 		urlParts: RegExpMatchArray | null,
@@ -682,7 +682,7 @@ function constructQueryParameters(parameters: {[key:string]: any | any[] }): str
  *     input: radio, checkbox
  * @returns {primitive data type | array | null} -- usually numeric or string representing choice from radio input object
  */
- function getCheckedInput(inputObj: HTMLInputElement | RadioNodeList): null | string | string[] {
+ export function getCheckedInput(inputObj: HTMLInputElement | RadioNodeList): null | string | string[] {
 	if ((inputObj as RadioNodeList).length) { // multiple checkbox
 		let checked: string[] = [];
 
@@ -707,7 +707,7 @@ function constructQueryParameters(parameters: {[key:string]: any | any[] }): str
 *        radio selection
 & @returns boolean  true if value set/utilized, false otherwise
 */
-function setCheckedInput(
+export function setCheckedInput(
 	inputObj: HTMLInputElement & RadioNodeList,
 	value: string | string[] | null
 ): boolean {
@@ -737,7 +737,7 @@ function setCheckedInput(
  * @param {string} delimiter [optional] -- character that will delimit the result string; default is '/'
  * @returns {string} -- MM[d]DD[d]YYYY-formatted string.
  */
-function formatDateToMMDDYYYY(
+export function formatDateToMMDDYYYY(
 		dateInput: string,
 		delimiter: string = "/"
 ): string | null {
@@ -765,7 +765,7 @@ function fixValueAsDate(date: Date): Date | null {
 // This will parse a delimited string into an array of
 // arrays. The default delimiter is the comma, but this
 // can be overriden in the second argument.
-function CSVToArray(
+export function CSVToArray(
 		strData: string,
 		strDelimiter: string = "," // default delimiter is ','
 ): string[][] {
@@ -1187,7 +1187,7 @@ function CSVToArray(
  * @param {object} obj -- basically any variable that may or may not be iterable
  * @returns boolean - true if iterable, false if not
  */
- function isIterable(obj: any) {
+ export function isIterable(obj: any) {
 	// checks for null and undefined
 	if (obj == null)
 		 return false;
@@ -1202,7 +1202,7 @@ function createGuid(){
 	return (S4() + S4() + "-" + S4() + "-4" + S4().substring(0,3) + "-" + S4() + "-" + S4() + S4() + S4()).toLowerCase();
 }
 
-function createFileDownload(parameters: {
+export function createFileDownload(parameters: {
 	href: string;
 	downloadFileName: string;
 	newTab?: boolean;
@@ -1235,7 +1235,7 @@ function createFileDownload(parameters: {
  * @param dropDivContainerId -- an outer DIV to contain the drag and drop. Useful to
  *     better decorate the div
  */
-function openFileUpload(
+export function openFileUpload(
 	callback: (fileList: FileList) => void
 ): void {
 	let containerDiv: HTMLDivElement = document.createElement("div"),
@@ -1339,7 +1339,7 @@ function disabledClick(evt: Event) {
 * @returns {object} all the data or error information via callbacks
 */
 
-function RESTrequest(elements: THttpRequestParams): void {
+export function RESTrequest(elements: THttpRequestParams): void {
 	if (elements.setDigest && elements.setDigest == true) {
  		let match: RegExpMatchArray = elements.url.match(/(.*\/_api)/) as RegExpMatchArray;
 
@@ -1728,7 +1728,7 @@ function getTaxonomyValue(obj: {[key:string]:any}, fieldName: string, returnValu
  * @returns
  */
 
-function dedupJSArray(array: string[] | any[]): any[] {
+export function dedupJSArray(array: string[] | any[]): any[] {
 	let newArray: any[] | string[] = [];
 
 	for (let elem of array)
@@ -1740,7 +1740,7 @@ function dedupJSArray(array: string[] | any[]): any[] {
 }
 
 
-declare function parseValue(results: object, fieldName: string): any;
+//declare function parseValue(results: object, fieldName: string): any;
 
 function parseManagedMetadata(results: any, fieldName: string) {
 	// Build out the managed metadata string needed for later updating.
