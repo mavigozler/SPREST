@@ -39,7 +39,6 @@ declare const MAX_REQUESTS = 500;
  *       method?: httpRequestMethods -- valid HTTP protocol verb in the request
  */
 declare function batchRequestingQueue(elements: IBatchHTTPRequestParams, allRequests: IBatchHTTPRequestForm[]): Promise<any>;
-declare function CreateUUID(): string;
 /**
  * @function singleBatchRequest -- used to exploit the $batch OData multiple write request
  * @param {object} elements -- properties that must be defined are:
@@ -60,6 +59,7 @@ declare function CreateUUID(): string;
  */
 declare function singleBatchRequest(elements: IBatchHTTPRequestParams, requests: IBatchHTTPRequestForm[]): Promise<unknown>;
 declare function splitRequests(responseSet: string): Promise<any>;
+declare function CreateUUID(): string;
 /**
  *
  * @param siteURL -- string representing URL of site

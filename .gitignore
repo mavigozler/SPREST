@@ -2,7 +2,7 @@
 **/*.js.map
 **/*.d.ts
 dist/
+run/
 **/*.log
-**/*.tsbuildinfo
-tasks.json
-**/*.gitignore
+**/tsconfig.tsbuildinfo
+node_modules/
