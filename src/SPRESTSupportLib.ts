@@ -2,8 +2,16 @@
 
 import * as SPRESTGlobals from './SPRESTGlobals';
 import * as SPRESTTypes from './SPRESTtypes';
-
 /* jshint -W069, -W119 */
+
+type TFetchInfo = {
+	RequestedUrl: string;
+	HttpStatus: number;
+	ContentType: string | null;
+	Etag: string | null; // \"\d{3}\"
+	Data: any;
+	ProcessedData: any[];
+};
 
 const SPstdHeaders: SPRESTTypes.THttpRequestHeaders = {
 	"Content-Type":"application/json;odata=verbose",
@@ -85,9 +93,9 @@ export class SPServerREST {
 								  elements,
 									data.d.__next,
 									data.d.results
-							  ).then((response) => {
+							  ).then((response: any) => {
 									elements.successCallback(response);
-							  }).catch((response) => {
+							  }).catch((response: any) => {
 									elements.errorCallback(response);
 							  });
 						else
@@ -167,14 +175,14 @@ export const MAX_REQUESTS = 500;
  *       url: string -- the valid REST URL to a SP resource
  *       method?: httpRequestMethods -- valid HTTP protocol verb in the request
  */
- function batchRequestingQueue(
-	elements: IBatchHTTPRequestParams,
-	allRequests: IBatchHTTPRequestForm[]
+export function batchRequestingQueue(
+	elements: SPRESTTypes.IBatchHTTPRequestParams,
+	allRequests: SPRESTTypes.IBatchHTTPRequestForm[]
 ): Promise<{success: TFetchInfo[], error: TFetchInfo[]}> {
-let allRequestsCopy: IBatchHTTPRequestForm[] = JSON.parse(JSON.stringify(allRequests)),
+let allRequestsCopy: SPRESTTypes.IBatchHTTPRequestForm[] = JSON.parse(JSON.stringify(allRequests)),
 	successResponses: TFetchInfo[] = [],
 	errorResponses: TFetchInfo[] = [],
-	subrequests: IBatchHTTPRequestForm[] = [];
+	subrequests: SPRESTTypes.IBatchHTTPRequestForm[] = [];
 
 	console.log("\n\n=======================" +
 	              "\nbatchRequestingQueue()" +
@@ -235,8 +243,8 @@ export function CreateUUID():string {
  *      2. the object {reqObj: AJAX request object, addlMessage: <string> message }
  */
 function singleBatchRequest(
-	elements: IBatchHTTPRequestParams,
-	requests: IBatchHTTPRequestForm[]
+	elements: SPRESTTypes.IBatchHTTPRequestParams,
+	requests: SPRESTTypes.IBatchHTTPRequestForm[]
 ): Promise<{success: TFetchInfo[], error: TFetchInfo[]} | null> {
 	return new Promise((resolve, reject) => {
 		let multipartBoundary = "batch_" + CreateUUID(),
@@ -247,8 +255,8 @@ function singleBatchRequest(
 				body = "",
 				content = "",
 				headerContent = "",
-				currentMethod: THttpRequestMethods | "" = "",
-				previousMethod: THttpRequestMethods | "" = "";
+				currentMethod: SPRESTTypes.THttpRequestMethods | "" = "",
+				previousMethod: SPRESTTypes.THttpRequestMethods | "" = "";
 
 		if (elements.AllHeaders)
 			for (let header in elements.AllHeaders)
@@ -260,7 +268,7 @@ function singleBatchRequest(
 			protocol = "" as SPRESTTypes.THttpRequestProtocol;
 		for (let request of requests) {
 			currentMethod = request.method ?? elements.AllMethods ?? "GET";
-			/ method checking
+			// method checking
 			if (currentMethod == "POST" && request.url.search(/\/items\(\d{1,}\)/) >= 0) {
 				resolve({
 					success: [],
@@ -382,32 +390,33 @@ function splitRequests(
 
 		if (allResponses == null)
 			return resolve(null);
-			for (let response of allResponses!) {
-				if ((httpCode = parseInt(response.match(/HTTP\/\d\.\d (\d{3})/)![1])) < 400) {
-					idx = fetchInfo.push({
-						RequestedUrl: requestedUrls[urlIndex++],
-						HttpStatus: httpCode,
-						ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
-						Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
-						Data: JSON.parse(response.match(/\{.*\}/)![0]),
-						ProcessedData: []
-					}) - 1;
-					checkResponse.push(new Promise((resolve, reject) => {
-						collectNext(fetchInfo[idx].Data, []).then((fetched) => {
-							resolve(fetched);
-						}).catch((response) => {
-							reject(response);
-						});
-					}));
-				} else
-					errorResponses.push({
-						RequestedUrl: requestedUrls[urlIndex++],
-						HttpStatus: httpCode,
-						ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
-						Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
-						Data: JSON.parse(response.match(/\{.*\}/)![0]),
-						ProcessedData: []
+		for (let response of allResponses!) {
+			if ((httpCode = parseInt(response.match(/HTTP\/\d\.\d (\d{3})/)![1])) < 400) {
+				idx = fetchInfo.push({
+					RequestedUrl: requestedUrls[urlIndex++],
+					HttpStatus: httpCode,
+					ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
+					Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
+					Data: JSON.parse(response.match(/\{.*\}/)![0]),
+					ProcessedData: []
+				}) - 1;
+				checkResponse.push(new Promise((resolve, reject) => {
+					collectNext(fetchInfo[idx].Data, []).then((fetched) => {
+						resolve(fetched);
+					}).catch((response) => {
+						reject(response);
 					});
+				}));
+			} else
+				errorResponses.push({
+					RequestedUrl: requestedUrls[urlIndex++],
+					HttpStatus: httpCode,
+					ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
+					Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
+					Data: JSON.parse(response.match(/\{.*\}/)![0]),
+					ProcessedData: []
+				});
+		}
 		Promise.all(checkResponse).then((fetches) => {
 			for (idx = 0; idx < fetches.length; idx++)
 				fetchInfo[idx].ProcessedData = fetches[idx];
@@ -1120,7 +1129,7 @@ export function CSVToArray(
 	 "select-image"?: string;
 	 "unselect-url"?: string;
 	 "unselect-image"?: string;
- }): HTMLElement {
+}): HTMLElement {
 	let capture: boolean = false,
 		includeText: boolean = false,
 		useText: string[] = ["select all", "unselect all"],
@@ -1505,7 +1514,7 @@ export function RequestAgain(
 	});
 }
 
-const
+export const
    SPListTemplateTypes = {
       enums: [
          { name: "InvalidType",     typeId: -1 },

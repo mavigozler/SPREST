@@ -104,7 +104,7 @@ export interface IBatchHTTPRequestParams {
 	path: string;
 	protocol?: THttpRequestProtocol;
 	AllHeaders?: THttpRequestHeaders;
-	AllMethods?: string;
+	AllMethods?: THttpRequestMethods;
 }
 
 export interface IBatchHTTPRequestForm {
