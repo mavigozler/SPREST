@@ -167,30 +167,43 @@ export const MAX_REQUESTS = 500;
  *       url: string -- the valid REST URL to a SP resource
  *       method?: httpRequestMethods -- valid HTTP protocol verb in the request
  */
-export function batchRequestingQueue(
-		elements: SPRESTTypes.IBatchHTTPRequestParams,
-		allRequests: SPRESTTypes.IBatchHTTPRequestForm[]
-): Promise<any> {
-	let responses = "",
-		subrequests: SPRESTTypes.IBatchHTTPRequestForm[] = [];
+ function batchRequestingQueue(
+	elements: IBatchHTTPRequestParams,
+	allRequests: IBatchHTTPRequestForm[]
+): Promise<{success: TFetchInfo[], error: TFetchInfo[]}> {
+let allRequestsCopy: IBatchHTTPRequestForm[] = JSON.parse(JSON.stringify(allRequests)),
+	successResponses: TFetchInfo[] = [],
+	errorResponses: TFetchInfo[] = [],
+	subrequests: IBatchHTTPRequestForm[] = [];
 
-	console.log("Queued " + allRequests.length + " requests");
+	console.log("\n\n=======================" +
+	              "\nbatchRequestingQueue()" +
+					  "\n=======================" +
+					  "\nQueued " + allRequestsCopy.length + " requests");
 	return new Promise((resolve, reject) => {
-		for (let j = 0, i = 0; j < MAX_REQUESTS && i < allRequests.length; j++, i++)
-			subrequests.push(allRequests[i]);
+		for (let j = 0, i = 0; j < MAX_REQUESTS && i < allRequestsCopy.length; j++, i++)
+			subrequests.push(allRequestsCopy[i]);
 		console.log("Batch of " + subrequests.length + " requests proceeding to network");
-		allRequests.splice(0, MAX_REQUESTS);
-		singleBatchRequest(elements, subrequests).then((response: any) => {
-			if (typeof response == "object")
-				response = JSON.stringify(response);
-			responses += response;
-			if (allRequests.length > 0)
-				batchRequestingQueue(elements, allRequests);
-			else
-				resolve(responses);
+		allRequestsCopy.splice(0, MAX_REQUESTS);
+		singleBatchRequest(elements, subrequests)
+			.then((response: {success: TFetchInfo[], error: TFetchInfo[]} | null) => {
+			if (response != null) {
+				successResponses = successResponses.concat(response.success);
+				errorResponses = errorResponses.concat(response.error);
+			}
+			if (allRequestsCopy.length > 0)
+				batchRequestingQueue(elements, allRequestsCopy);
+				else
+				resolve({
+					success: successResponses,
+					error: errorResponses
+				});
 		}).catch((response) => {
-			responses += response;
-			reject(responses);
+			errorResponses = errorResponses.concat(response);
+			reject({
+				success: null,
+				error: errorResponses
+			});
 		});
 	});
 }
@@ -222,19 +235,20 @@ export function CreateUUID():string {
  *      2. the object {reqObj: AJAX request object, addlMessage: <string> message }
  */
 function singleBatchRequest(
-	elements: SPRESTTypes.IBatchHTTPRequestParams,
-	requests: SPRESTTypes.IBatchHTTPRequestForm[]
-) {
+	elements: IBatchHTTPRequestParams,
+	requests: IBatchHTTPRequestForm[]
+): Promise<{success: TFetchInfo[], error: TFetchInfo[]} | null> {
 	return new Promise((resolve, reject) => {
 		let multipartBoundary = "batch_" + CreateUUID(),
 				changeSetBoundary = "changeset_" + CreateUUID(),
 				protocol = elements.protocol ?? "https://",
+				requestedUrls: string[] = [],
 				allHeaders = "",
 				body = "",
 				content = "",
 				headerContent = "",
-				currentMethod = "",
-				previousMethod = "";
+				currentMethod: THttpRequestMethods | "" = "",
+				previousMethod: THttpRequestMethods | "" = "";
 
 		if (elements.AllHeaders)
 			for (let header in elements.AllHeaders)
@@ -246,7 +260,22 @@ function singleBatchRequest(
 			protocol = "" as SPRESTTypes.THttpRequestProtocol;
 		for (let request of requests) {
 			currentMethod = request.method ?? elements.AllMethods ?? "GET";
-			if (currentMethod != "GET")
+			/ method checking
+			if (currentMethod == "POST" && request.url.search(/\/items\(\d{1,}\)/) >= 0) {
+				resolve({
+					success: [],
+					error: [{
+						RequestedUrl: request.url,
+						Etag: null,
+						ContentType: request.headers ? request.headers!["Content-Type"] as string : null,
+						HttpStatus: 0,
+						Data: "A URL with POST method was found with a GetById() function used. " +
+							"POST methods create items, while PATCH methods are used to update items.",
+						ProcessedData: []
+					}]
+				});
+				return;
+			}if (currentMethod != "GET")
 				body += "\n\n--" + changeSetBoundary;
 			else if (previousMethod.length > 0 && previousMethod != "GET" && currentMethod == "GET")
 				body += "\n\n--" + changeSetBoundary + "--";
@@ -257,6 +286,7 @@ function singleBatchRequest(
 			body += "\nContent-Transfer-Encoding: binary";
 
 			body += "\n\n" + currentMethod + " " + request.url + " HTTP/1.1";
+			requestedUrls.push(request.url);
 
  			// header part
 			if (request.headers)
@@ -302,7 +332,8 @@ function singleBatchRequest(
 				console.log(
 					"Content-Type: multipart/mixed; boundary=" + multipartBoundary +
 					"\nAccept: application/json;odata=verbose");
-				console.log("\n\n\n************* ENTIRE BODY CONTENT ***************** \n" + content);
+					console.log("\n\n\n************* START BODY CONTENT ***************** \n" +
+					content + "\n************** END BODY CONTENT ******************");
 				$.ajax({
 					url: protocol + elements.host + elements.path + "/_api/$batch",
 					method: "POST",
@@ -315,18 +346,19 @@ function singleBatchRequest(
 					},
 					data: content,
 					success: (data: any) => {
-						splitRequests(data).then((response) => {
-							resolve(response); // should be array of all responses to batch requests
+						splitRequests(data, requestedUrls).
+							then((response: {success: TFetchInfo[], error: TFetchInfo[]} | null) => {
 						}).catch((response: any) => {
 							reject(response);
 						});
 					},
+					// error completing the batch request
 					error: (reqObj: object) => {
 						reject(reqObj);
 					}
 				});
 			},
-
+			// Error getting POST token
 			error: (reqObj: object) => {
 				reject(reqObj);
 			}
@@ -334,24 +366,55 @@ function singleBatchRequest(
 	});
 }
 
-function splitRequests(responseSet: string): Promise<any> {
+function splitRequests(
+	responseSet: string,
+	requestedUrls: string[]
+): Promise<{success: TFetchInfo[], error: TFetchInfo[] } | null> {
 	return new Promise((resolve, reject) => {
-		let checkResponse: Promise<any>[] = [],
-		allResponses: RegExpMatchArray | null = responseSet.match(/HTTP\/1.1[^\{]+(\{.*\})/g);
+		let idx: number,
+			httpCode: number,
+			urlIndex: number = 0,
+			checkResponse: Promise<any>[] = [],
+			match: RegExpMatchArray | null,
+			fetchInfo: TFetchInfo[] = [],
+			errorResponses: TFetchInfo[] = [],
+			allResponses: RegExpMatchArray | null = responseSet.match(/HTTP\/1.1[^\{]+(\{.*\})/g);
 
 		if (allResponses == null)
 			return resolve(null);
-		for (let response of allResponses!)
-			checkResponse.push(new Promise((resolve, reject) => {
-				collectNext(JSON.parse(response.match(/\{.*\}/)![0]), []).then((fetched) => {
-					resolve(fetched);
-				}).catch((response) => {
-					reject(response);
-				});
-			}));
-
+			for (let response of allResponses!) {
+				if ((httpCode = parseInt(response.match(/HTTP\/\d\.\d (\d{3})/)![1])) < 400) {
+					idx = fetchInfo.push({
+						RequestedUrl: requestedUrls[urlIndex++],
+						HttpStatus: httpCode,
+						ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
+						Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
+						Data: JSON.parse(response.match(/\{.*\}/)![0]),
+						ProcessedData: []
+					}) - 1;
+					checkResponse.push(new Promise((resolve, reject) => {
+						collectNext(fetchInfo[idx].Data, []).then((fetched) => {
+							resolve(fetched);
+						}).catch((response) => {
+							reject(response);
+						});
+					}));
+				} else
+					errorResponses.push({
+						RequestedUrl: requestedUrls[urlIndex++],
+						HttpStatus: httpCode,
+						ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
+						Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
+						Data: JSON.parse(response.match(/\{.*\}/)![0]),
+						ProcessedData: []
+					});
 		Promise.all(checkResponse).then((fetches) => {
-			resolve(fetches);
+			for (idx = 0; idx < fetches.length; idx++)
+				fetchInfo[idx].ProcessedData = fetches[idx];
+				resolve({
+					success: fetchInfo,
+					error: errorResponses
+			});
 		}).catch((response) => {
 			reject(response);
 		});
@@ -1442,7 +1505,7 @@ export function RequestAgain(
 	});
 }
 
-export const
+const
    SPListTemplateTypes = {
       enums: [
          { name: "InvalidType",     typeId: -1 },
