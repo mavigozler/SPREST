@@ -1,4 +1,4 @@
-"use strict"; 
+"use strict";
 
 /*  SP User via REST
 
@@ -30,6 +30,16 @@ How to get info on all users through siteuserinfolist:
 
 */
 
+import * as SPRESTTypes from './SPRESTtypes';
+import * as SPRESTGlobals from './SPRESTGlobals';
+
+type TUserSearch = {
+	userId?: number;
+	id?: number;
+	firstName?: string;
+	lastName?: string;
+};
+
 
 /** @function UserInfo -- class to store user information from the SharePoint system
  *  @param  {object} search
@@ -40,19 +50,19 @@ How to get info on all users through siteuserinfolist:
  *                                      {.lastName: "<last-name>", .firstName: "<first-name>" }
  *          {.debugging: true...sets for debugger}
  */
- class UserInfo {
+ export class UserInfo {
 	search: TUserSearch;
-	userId: number; // numeric SP ID
-	loginName: string; //i:0#.w|domain\\user name
-	title: string; // "<last name>, <first name> <org>
-	emailAddress: string;
-	userName: string;
-	firstName: string;
-	lastName: string;
-	workPhone: string;
-	created: Date;
-	modified: Date;
-	jobTitle: string;
+	userId: number = -1; // numeric SP ID
+	loginName: string = ""; //i:0#.w|domain\\user name
+	title: string = ""; // "<last name>, <first name> <org>
+	emailAddress: string = "";
+	userName: string = "";
+	firstName: string = "";
+	lastName: string = "";
+	workPhone: string = "";
+	created: Date = new Date(0);
+	modified: Date = new Date(0);
+	jobTitle: string = "";
 	dataComplete: boolean = false;
 	//        storeData = storeDataEx.bind(null, this);
 	constructor(search: TUserSearch) {
@@ -62,10 +72,10 @@ How to get info on all users through siteuserinfolist:
 		if (search.id)
 			this.search.userId = search.id;
 	}
-	
+
 	populateUserData (userRestReqObj: SPUserREST): Promise<any> {
 		return new Promise((resolve, reject) => {
-			let type: number, 
+			let type: number,
 				args: {
 					userId?: number;
 					lastName?: string;
@@ -73,25 +83,25 @@ How to get info on all users through siteuserinfolist:
 				} = {};
 
 			if (this.search.userId) {
-				type = requestType.TYPE_ID;
+				type = SPRESTGlobals.requestType.TYPE_ID;
 				args = {
 					userId: this.search.userId
 				};
 			} else if (this.search.lastName)
 			   if (this.search.firstName) {
-					type = requestType.TYPE_FULL_NAME;
+					type = SPRESTGlobals.requestType.TYPE_FULL_NAME;
 					args = {
 						lastName: this.search.lastName,
 						firstName: this.search.firstName
 					};
 				} else {
-					type = requestType.TYPE_LAST_NAME;
+					type = SPRESTGlobals.requestType.TYPE_LAST_NAME;
 					args = {
 						lastName: this.search.lastName
 					};
 				}
 			else  {
-				type = requestType.TYPE_CURRENT_USER;
+				type = SPRESTGlobals.requestType.TYPE_CURRENT_USER;
 			}
 			userRestReqObj.requestUserInfo({
 					uiObject: this,
@@ -147,7 +157,7 @@ How to get info on all users through siteuserinfolist:
  *        .site {string} [optional]  site within server site collection, empty string is default
  *        .debugging {boolean}  if true, set to debugging
  */
- class SPUserREST {
+export class SPUserREST {
 	server: string;
 	site: string;
 	constructor(parameters: {
@@ -184,7 +194,7 @@ How to get info on all users through siteuserinfolist:
 		if (parameters.uiObject instanceof UserInfo == false)
 			throw "SPUserREST.requestUserInfo(): missing 'uiObject' parameter or parameter not UserInfo class";
 		return new Promise((resolve, reject) => {
-			if (parameters.type == requestType.TYPE_CURRENT_USER)
+			if (parameters.type == SPRESTGlobals.requestType.TYPE_CURRENT_USER)
 				this.processRequest({
 					url: this.server + this.site + "/_api/web/currentuser"
 				}).then((response) => {
@@ -201,7 +211,7 @@ How to get info on all users through siteuserinfolist:
 				}).catch((response) => {
 					reject(response);
 				});
-			else if (parameters.type == requestType.TYPE_ID)
+			else if (parameters.type == SPRESTGlobals.requestType.TYPE_ID)
 				this.processRequest({
 					url: this.server + this.site + "/_api/web/siteuserinfolist/items(" + parameters.args!.userId + ")"
 				}).then((response) => {
@@ -214,7 +224,7 @@ How to get info on all users through siteuserinfolist:
 				});
 			else { // type == TYPE_FULL_NAME or TYPE_LAST_NAME
 				let filter: string = "$filter=lastName eq '" + parameters.args!.lastName + "'";
-				if (parameters.type == requestType.TYPE_FULL_NAME)
+				if (parameters.type == SPRESTGlobals.requestType.TYPE_FULL_NAME)
 					filter += " and firstName eq '" + parameters.args!.firstName + "'";
 				this.processRequest({
 					url: this.server + this.site + "/_api/web/siteuserinfolist/items?" + filter
@@ -253,23 +263,7 @@ How to get info on all users through siteuserinfolist:
 	};
 }
 
-/**
- * @function getSharePointCurrentUserInfo -- return infor from SP server about current user
- * @param parameters the server hostname and the site 
- * @returns Promise with response being several parameters
- *    email
- * 	userId
- * 	loginName
- * 	title
- * 	jobTitle
- * 	lastName
- * 	firstName
- * 	workPhone
- * 	userName
- * 	created
- * 	modified
- */
-function getSharePointCurrentUserInfo(parameters: {
+export function getSharePointCurrentUserInfo(parameters: {
 	server: string;
 	site: string;
 }): Promise<any> {
@@ -287,7 +281,7 @@ function getSharePointCurrentUserInfo(parameters: {
 	});
 }
 
-function getSharePointUserInfo(parameters: {
+export function getSharePointUserInfo(parameters: {
 	server: string;
 	site: string;
 	userId: number;
@@ -317,7 +311,7 @@ function getSharePointUserInfo(parameters: {
 }
 
 let CollectedResults: any[];
-function getAllSharePointUsersInfo(parameters: {
+export function getAllSharePointUsersInfo(parameters: {
 	url?: string;
 	server?: string;
 	site?: string;
@@ -326,14 +320,14 @@ function getAllSharePointUsersInfo(parameters: {
 	return new Promise((resolve, reject) => {
 		$.ajax({
 			method: "GET",
-			url: parameters.url ? parameters.url : "https://" + parameters.server + parameters.site + 
+			url: parameters.url ? parameters.url : "https://" + parameters.server + parameters.site +
 					"/_api/web/siteuserinfolist/items" +
 					(parameters.query ? "?" + parameters.query : ""),
 			headers: {
 				"Content-Type": "application/json;odata=verbose",
 				"Accept": "application/json;odata=verbose"
 			},
-			success: (data: TSPResponseData) => {
+			success: (data: SPRESTTypes.TSPResponseData) => {
 				if (!CollectedResults)
 					CollectedResults = data.d!.results as any[];
 				else
