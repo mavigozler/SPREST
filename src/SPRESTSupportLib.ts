@@ -1,8 +1,11 @@
 "use strict";
 
+import * as SPRESTGlobals from './SPRESTGlobals';
+import * as SPRESTTypes from './SPRESTtypes';
+
 /* jshint -W069, -W119 */
 
-const SPstdHeaders: THttpRequestHeaders = {
+const SPstdHeaders: SPRESTTypes.THttpRequestHeaders = {
 	"Content-Type":"application/json;odata=verbose",
 	"Accept":"application/json;odata=verbose"
 };
@@ -14,7 +17,7 @@ export class SPServerREST {
 	URL: string;
 	apiPrefix: string;
 
-	static stdHeaders: THttpRequestHeaders = {
+	static stdHeaders: SPRESTTypes.THttpRequestHeaders = {
 		"Accept": "application/json;odata=verbose",
 		"Content-Type": "application/json;odata=verbose"
 	};
@@ -26,7 +29,7 @@ export class SPServerREST {
 		this.apiPrefix = this.URL + "/_api";
 	}
 
-	static httpRequest(elements: THttpRequestParams): void {
+	static httpRequest(elements: SPRESTTypes.THttpRequestParams): void {
 		if (elements.setDigest && elements.setDigest == true) {
 			let match = elements.url.match(/(.*\/_api)/) as string[];
 			$.ajax({  // get digest token
@@ -51,7 +54,7 @@ export class SPServerREST {
 						url: elements.url,
 						method: !elements.method ? "GET" : elements.method,
 						headers: headers,
-						data: (elements.body ?? elements.data) as TXmlHttpRequestData,
+						data: (elements.body ?? elements.data) as SPRESTTypes.TXmlHttpRequestData,
 						success: (data: any, status: string, requestObj: JQueryXHR) => {
 							elements.successCallback(data, status, requestObj);
 						},
@@ -75,8 +78,8 @@ export class SPServerREST {
 				url: elements.url,
 				method: !elements.method ? "GET" : elements.method,
 				headers: elements.headers,
-				data: elements.body ?? elements.data as TXmlHttpRequestData,
-				success: (data: TSPResponseData , status: string, requestObj: JQueryXHR) => {
+				data: elements.body ?? elements.data as SPRESTTypes.TXmlHttpRequestData,
+				success: (data: SPRESTTypes.TSPResponseData , status: string, requestObj: JQueryXHR) => {
 						 if (data.d && data.d.__next && data.d.results)
 							  RequestAgain(
 								  elements,
@@ -100,10 +103,10 @@ export class SPServerREST {
 	static httpRequestPromise(parameters: {
 		url: string;
 		setDigest?: boolean;
-		method?: THttpRequestMethods;
-		headers?: THttpRequestHeaders;
-		data?: TXmlHttpRequestData;
-		body?: TXmlHttpRequestData;
+		method?: SPRESTTypes.THttpRequestMethods;
+		headers?: SPRESTTypes.THttpRequestHeaders;
+		data?: SPRESTTypes.TXmlHttpRequestData;
+		body?: SPRESTTypes.TXmlHttpRequestData;
 	}): Promise<any> {
 		return new Promise((resolve, reject) => {
 			SPServerREST.httpRequest({
@@ -112,7 +115,7 @@ export class SPServerREST {
 				method: parameters.method,
 				headers: parameters.headers,
 				data: parameters.data ?? parameters.body as string,
-				successCallback: (data: TSPResponseData, status?: string, reqObj?: JQueryXHR) => {
+				successCallback: (data: SPRESTTypes.TSPResponseData, status?: string, reqObj?: JQueryXHR) => {
 					resolve({data: data, message: status, reqObj: reqObj});
 				},
 				errorCallback: (reqObj: JQueryXHR, text?: string, errThrown?: string) => {
@@ -152,24 +155,24 @@ export const MAX_REQUESTS = 500;
 /**
  * @function batchRequestingQueue -- when requests are too large in number (> MAX_REQUESTS), the batching
  * 		needs to be broken up in batches
- * @param {IBatchHTTPRequestParams} elements -- same as elements in singleBatchRequest
+ * @param {SPRESTTypes.IBatchHTTPRequestParams} elements -- same as elements in singleBatchRequest
  *    the BatchHTTPRequestParams object has following properties
  *       host: string -- required name of the server (optional to lead with "https?://")
  *       path: string -- required path to a valid SP site
  *       protocol?: string -- valid use of "http" or "https" with "://" added to it or not
- *       AllHeaders?: THttpRequestHeaders -- object of [key:string]: T; type, headers to apply to all requests in batch
+ *       AllHeaders?: SPRESTTypes.THttpRequestHeaders -- object of [key:string]: T; type, headers to apply to all requests in batch
  *       AllMethods?: string -- HTTP method to apply to all requests in batch
- * @param {IBatchHTTPRequestForm} allRequests -- the requests in singleBatchRequest
+ * @param {SPRESTTypes.IBatchHTTPRequestForm} allRequests -- the requests in singleBatchRequest
  *    the BatchHTTPRequestForm object has following properties
  *       url: string -- the valid REST URL to a SP resource
  *       method?: httpRequestMethods -- valid HTTP protocol verb in the request
  */
 export function batchRequestingQueue(
-		elements: IBatchHTTPRequestParams,
-		allRequests: IBatchHTTPRequestForm[]
+		elements: SPRESTTypes.IBatchHTTPRequestParams,
+		allRequests: SPRESTTypes.IBatchHTTPRequestForm[]
 ): Promise<any> {
 	let responses = "",
-		subrequests: IBatchHTTPRequestForm[] = [];
+		subrequests: SPRESTTypes.IBatchHTTPRequestForm[] = [];
 
 	console.log("Queued " + allRequests.length + " requests");
 	return new Promise((resolve, reject) => {
@@ -219,8 +222,8 @@ export function CreateUUID():string {
  *      2. the object {reqObj: AJAX request object, addlMessage: <string> message }
  */
 function singleBatchRequest(
-	elements: IBatchHTTPRequestParams,
-	requests: IBatchHTTPRequestForm[]
+	elements: SPRESTTypes.IBatchHTTPRequestParams,
+	requests: SPRESTTypes.IBatchHTTPRequestForm[]
 ) {
 	return new Promise((resolve, reject) => {
 		let multipartBoundary = "batch_" + CreateUUID(),
@@ -240,7 +243,7 @@ function singleBatchRequest(
 		if (protocol.search(/\/\/$/) < 0)
 			protocol += "//";
 		if (elements.host.search(/http/) == 0)
-			protocol = "" as THttpRequestProtocol;
+			protocol = "" as SPRESTTypes.THttpRequestProtocol;
 		for (let request of requests) {
 			currentMethod = request.method ?? elements.AllMethods ?? "GET";
 			if (currentMethod != "GET")
@@ -425,7 +428,7 @@ function SPListColumnCopy(
 				"Content-Type": "application/json;odata=verbose",
 			},
 			successCallback: (data: any /*, text, reqObj */) => {
-				let requests: IBatchHTTPRequestForm[] = [],
+				let requests: SPRESTTypes.IBatchHTTPRequestForm[] = [],
 					host: string = siteURL.match(/https:\/\/[^\/]+/)![0],
 					responses: string = "",
 					body: any;
@@ -470,7 +473,7 @@ function SPListColumnCopy(
  * @param {object}  JsonBody -- JS object which conforms to JSON rules. Must be "field_properties" : "field_values" format
  *                    If one of the properties is "__SetType__", it will fix the "__metadata" property
  */
-function formatRESTBody(JsonBody: { [key: string]: string | object } | string ): string {
+export function formatRESTBody(JsonBody: { [key: string]: string | object } | string ): string {
    let testString: string, testBody: object,
 
 
@@ -507,19 +510,19 @@ function formatRESTBody(JsonBody: { [key: string]: string | object } | string ):
 	return temp;
 }
 
-function checkEntityTypeProperty(body: object, typeCheck: string) {
+export function checkEntityTypeProperty(body: object, typeCheck: string) {
 	let checkRE: RegExp;
 
 	if (typeCheck == "item")
-		checkRE = ListItemEntityTypeRE;
+		checkRE = SPRESTGlobals.ListItemEntityTypeRE;
 	else if (typeCheck == "list")
-		checkRE = ListEntityTypeRE;
+		checkRE = SPRESTGlobals.ListEntityTypeRE;
 	else if (typeCheck == "field")
-		checkRE = ListFieldEntityTypeRE;
+		checkRE = SPRESTGlobals.ListFieldEntityTypeRE;
 	else if (typeCheck == "content type")
-		checkRE = ContentTypeEntityTypeRE;
+		checkRE = SPRESTGlobals.ContentTypeEntityTypeRE;
 	else if (typeCheck == "view")
-		checkRE = ViewEntityTypeRE;
+		checkRE = SPRESTGlobals.ViewEntityTypeRE;
 	else
 		return false;
 	for (let property in body)
@@ -546,7 +549,7 @@ function checkEntityTypeProperty(body: object, typeCheck: string) {
 				parsed after the query identifier character '?'
  */
 
-export function ParseSPUrl (url: string): TParsedURL | null {
+export function ParseSPUrl (url: string): SPRESTTypes.TParsedURL | null {
 	const urlRE = /(https?:\/\/[^\/]+)|(\/[^\/\?]+)/g;
 	let index: number,
 		urlParts: RegExpMatchArray | null,
@@ -607,7 +610,7 @@ export function ParseSPUrl (url: string): TParsedURL | null {
 	//	urlParts[3] = urlParts[3].substring(0, urlParts[3].length - 1);
 	return {
 		originalUrl: url,
-		protocol: urlParts[0].substring(0, urlParts[0].lastIndexOf("/") + 1) as THttpRequestProtocol,
+		protocol: urlParts[0].substring(0, urlParts[0].lastIndexOf("/") + 1) as SPRESTTypes.THttpRequestProtocol,
 		server: urlParts[0],
 		hostname: urlParts[0].substring(urlParts[0].lastIndexOf("/") + 1),
 		siteFullPath: siteFullPath,
@@ -628,7 +631,7 @@ export function ParseSPUrl (url: string): TParsedURL | null {
  * @returns -- the return operations are to unwind the recursion in the processing
  *           to get to either resolve or reject operations
  */
-function serialSPProcessing(opFunction: (arg1: any) => Promise<any>, itemset: any[]): Promise<any> {
+export function serialSPProcessing(opFunction: (arg1: any) => Promise<any>, itemset: any[]): Promise<any> {
 	let responses: any[] = [ ];
 	return new Promise((resolve) => {
 		function iterate(index: number) {
@@ -649,7 +652,7 @@ function serialSPProcessing(opFunction: (arg1: any) => Promise<any>, itemset: an
 	});
 }
 
-function constructQueryParameters(parameters: {[key:string]: any | any[] }): string {
+export function constructQueryParameters(parameters: {[key:string]: any | any[] }): string {
 	let query: string = "",
 		odataFunctions = ["filter", "select", "expand", "top", "count", "skip"];
 
@@ -854,7 +857,7 @@ export function CSVToArray(
  * @param {function} onChangeHandler   event handler when onchage occurs
  * @returns {string} DOM id attribute of containing DIV so that it can be removed as DOM node by caller
  */
- function buildSelectSet(
+ export function buildSelectSet(
 	parentNode: HTMLElement,   // DOM node to append the construct
 	nameOrGuid: string,   // used in tagging
 	options: {
@@ -1195,7 +1198,7 @@ export function CSVToArray(
  }
 
 // off the Internet
-function createGuid(){
+export function createGuid(){
 	function S4() {
 		return (1 + Math.random() * 0x10000 | 0).toString(16).substring(1);
 	}
@@ -1326,12 +1329,12 @@ function disabledClick(evt: Event) {
 
 /**
 * @function RESTrequest -- REST requests interface optimized for SharePoint server
-* @param {THttpRequestParams} elements -- all the object properties necessary for the jQuery library AJAX XML-HTTP Request call
+* @param {SPRESTTypes.THttpRequestParams} elements -- all the object properties necessary for the jQuery library AJAX XML-HTTP Request call
 *     properties are:
 *        url: string;
 *        setDigest?: boolean;
 *        method?: THttpMethods;
-*        headers?: THttpRequestHeaders;
+*        headers?: SPRESTTypes.THttpRequestHeaders;
 *        data?: string | ArrayBuffer | null;
 *        body?:  same as data
 *        successCallback: TSuccessCallback;
@@ -1339,7 +1342,7 @@ function disabledClick(evt: Event) {
 * @returns {object} all the data or error information via callbacks
 */
 
-export function RESTrequest(elements: THttpRequestParams): void {
+export function RESTrequest(elements: SPRESTTypes.THttpRequestParams): void {
 	if (elements.setDigest && elements.setDigest == true) {
  		let match: RegExpMatchArray = elements.url.match(/(.*\/_api)/) as RegExpMatchArray;
 
@@ -1348,7 +1351,7 @@ export function RESTrequest(elements: THttpRequestParams): void {
 	 		method: "POST",
 	 		headers: {...SPstdHeaders},
 	 		success: function (data) {
-			  let headers: THttpRequestHeaders = elements.headers as THttpRequestHeaders;
+			  let headers: SPRESTTypes.THttpRequestHeaders = elements.headers as SPRESTTypes.THttpRequestHeaders;
 
 				if (headers) {
 					headers["Content-Type"] = "application/json;odata=verbose";
@@ -1362,7 +1365,7 @@ export function RESTrequest(elements: THttpRequestParams): void {
 					method: elements.method ? elements.method : "GET",
 					headers: headers,
 					data: elements.body || elements.data as string,
-					success: function (data: TSPResponseData, status: string, requestObj: JQueryXHR) {
+					success: function (data: SPRESTTypes.TSPResponseData, status: string, requestObj: JQueryXHR) {
 						elements.successCallback!(data, status, requestObj);
 					},
 					error: function (requestObj: JQueryXHR, status: string, thrownErr: string) {
@@ -1386,7 +1389,7 @@ export function RESTrequest(elements: THttpRequestParams): void {
 			method: elements.method,
 			headers: elements.headers,
 			data: elements.body || elements.data as string,
-			success: function (data: TSPResponseData, status: string, requestObj: JQueryXHR) {
+			success: function (data: SPRESTTypes.TSPResponseData, status: string, requestObj: JQueryXHR) {
 				if (data.d && data.d.__next)
 					RequestAgain(
 						elements,
@@ -1407,10 +1410,10 @@ export function RESTrequest(elements: THttpRequestParams): void {
 	}
 }
 
-function RequestAgain(
-		elements: THttpRequestParams,
+export function RequestAgain(
+		elements: SPRESTTypes.THttpRequestParams,
 		nextUrl: string,
-		aggregateData: TSPResponseDataProperties[]
+		aggregateData: SPRESTTypes.TSPResponseDataProperties[]
 ): Promise<any> {
 	return new Promise((resolve, reject) => {
 		$.ajax({
@@ -1439,7 +1442,7 @@ function RequestAgain(
 	});
 }
 
-const
+export const
    SPListTemplateTypes = {
       enums: [
          { name: "InvalidType",     typeId: -1 },
@@ -1741,7 +1744,7 @@ export function dedupJSArray(array: string[] | any[]): any[] {
 
 
 //declare function parseValue(results: object, fieldName: string): any;
-
+/*
 function parseManagedMetadata(results: any, fieldName: string) {
 	// Build out the managed metadata string needed for later updating.
 	// Some links that helped me figure all this out.
@@ -1771,7 +1774,7 @@ function parseManagedMetadata(results: any, fieldName: string) {
 		}
 	}
 	return metaString;
-}
+} */
 
 SelectAllCheckboxes =
     "data:image/png;base64,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";

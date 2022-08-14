@@ -23,6 +23,15 @@
  *           to be separated by a SEMI-COLON!
  */
 
+interface IEmailHeaders {
+	To: string;
+	Subject: string;
+	Body: string;
+	CC?: string | null;
+	BCC?: string | null;
+	From?: string | null;
+}
+
 export class SPUtilityEmailService {
     server: string;
     site: string;
