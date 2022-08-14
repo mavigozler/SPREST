@@ -1,34 +1,51 @@
 "use strict";
+
 /* jshint -W119, -W069, -W083 */
+
+import * as SPRESTTypes from './SPRESTtypes';
+import { SPSiteREST } from './SPSiteREST';
+import * as SPRESTSupportLib from './SPRESTSupportLib';
+import * as SPRESTGlobals from './SPRESTGlobals';
+
+/***************************************************************
+ *  Basic interface
+ * 		spList = new SPListREST(setup: TListSetup)
+ *
+ *
+ *
+ ***************************************************************/
 
 /**
  * @class SPListREST  -- constructor for interface to making REST request for SP Lists
  */
-class SPListREST {
+export class SPListREST {
 	protocol: string;
 	server: string;
 	site: string;
 	apiPrefix: string;
-	listName: string;
-	listGuid: string;
-	baseUrl: string;
-	serverRelativeUrl: string;
-	creationDate: Date;
-	baseTemplate: string;
-	allowContentTypes: boolean;
-	itemCount: number;
-	listItemEntityTypeFullName: string;
-	rootFolder: string;
-	contentTypes: object;
-	listIds: number[];
-	fields: any[];
-	fieldInfo: any[];
-	lookupFieldInfo: TLookupFieldInfo[];
-	lookupInfoCached: boolean;
-	linkToDocumentContentTypeId: string;
-	currentListIdIndex: number;
-	setup: TListSetup;
-	static stdHeaders: THttpRequestHeaders = {
+	listName: string = "";
+	listGuid: string = "";
+	baseUrl: string = "";
+	serverRelativeUrl: string = "";
+	creationDate: Date = new Date(0);
+	baseTemplate: string = "";
+	allowContentTypes: boolean = Boolean(null);
+	itemCount: number = -1;
+	listItemEntityTypeFullName: string = "";
+	rootFolder: string = "";
+	contentTypes: object = {};
+	listIds: number[] = [];
+	fields: any[] = [];
+	fieldInfo: any[] = [];
+	lookupFieldInfo: SPRESTTypes.TLookupFieldInfo[] = [];
+	lookupInfoCached: boolean = Boolean(null);
+	linkToDocumentContentTypeId: string = "";
+	currentListIdIndex: number = -1;
+	setup: SPRESTTypes.TListSetup;
+	sitePedigree: SPRESTTypes.TSiteInfo = {};
+	arrayPedigree: SPRESTTypes.TSiteInfo[] = [];
+
+	static stdHeaders: SPRESTTypes.THttpRequestHeaders = {
 		"Accept": "application/json;odata=verbose",
 		"Content-Type": "application/json;odata=verbose"
 	};
@@ -40,9 +57,9 @@ class SPListREST {
 	* 	site: {string}  URL string part to the site
 	*		list: {string}  must be a valid list name. To create a list, use SPSiteREST() object
 	*    include: {string}  comma-separated properties to be part of OData $expand for more properties
-	*	} setup -- object to initialize the 
+	*	} setup -- object to initialize the
 	*/
-	constructor(setup: TListSetup) {
+	constructor(setup: SPRESTTypes.TListSetup) {
 		let matches: string[] | null;
 
 		if (this instanceof SPListREST == false)
@@ -63,7 +80,6 @@ class SPListREST {
 		this.site = setup.site;
 		if (setup.site.charAt(0) != "/")
 			this.site = "/" + this.site;
-		this.apiPrefix = this.protocol + this.server + this.site + "/_api";
 		if (setup.listName)
 			this.listName = setup.listName;
 		else if (setup.listGuid)
@@ -73,7 +89,8 @@ class SPListREST {
 		if (!(this.listName || this.listGuid))
 			throw "Neither a list name or list GUID were provided to identify a list";
 		this.setup = setup;
-/*			
+		this.apiPrefix = this.protocol + this.server + this.site + "/_api";
+/*
 		if (setup.linkToDocumentContentTypeId)
 			this.linkToDocumentContentTypeId = setup.linkToDocumentContentTypeId; */
 	}
@@ -87,17 +104,19 @@ class SPListREST {
 	 * @returns Promise
 	 */
 	init() {
-		return new Promise((resolve, reject) => { 
+		return new Promise((resolve, reject) => {
 			$.ajax({
 				url:  this.apiPrefix + "/web/lists" +
 					(this.listName ? "/getByTitle('" + this.listName + "')" :
 					"(guid'" + this.listGuid + "')") +
-					"?$expand=RootFolder,ContentTypes,Fields" + 
+					"?$expand=RootFolder,ContentTypes,Fields" +
 					(this.setup && this.setup.include ? "," + this.setup.include : ""),
 				method: "GET",
 				headers: SPListREST.stdHeaders,
 				success: (data) => {
-					let loopData, info;
+					let loopData: any[],
+						lookupFieldTypeNum = SPRESTSupportLib.SPFieldTypes.getFieldTypeIdFromTypeName("Lookup");
+
 					data = data.d;
 					this.baseUrl = this.server + this.site;
 					this.serverRelativeUrl = data.RootFolder.ServerRelativeUrl;
@@ -113,22 +132,27 @@ class SPListREST {
 					this.fields = data.Fields.results;
 					if (this.setup.include) {
 						let components: string[] = this.setup.include.split(",");
-			
-						for (let component of components) 
+
+						for (let component of components)
 							//this[component] = data[component];
 							Object.defineProperty(this, data[component], component);
 					}
 							// for doc libs, look for "Link To Document" content type and store its content type ID
-					if (isIterable(loopData = data.ContentTypes.results) == true) {
-						let i;
-			
-						for (i = 0; i < loopData.length; i++)
-							if (loopData[i].Name == "Link to a Document")
-								break;
-						if (i < loopData.length)
-							this.linkToDocumentContentTypeId = loopData[i].Id.StringValue;
-					}
-					resolve(true);
+					// one more trip to the network to get any lookup field information
+					this.getLookupFieldsInfo().then((response) => {
+						if (SPRESTSupportLib.isIterable(loopData = data.ContentTypes.results) == true) {
+							let i;
+
+							for (i = 0; i < loopData.length; i++)
+								if (loopData[i].Name == "Link to a Document")
+									break;
+							if (i < loopData.length)
+								this.linkToDocumentContentTypeId = loopData[i].Id.StringValue;
+						}
+						resolve(true);
+					}).catch((response) => {
+						reject("List info error\n" + JSON.stringify(response, null, "  "));
+					});
 				},
 				error: (reqObj) => {
 					reject("List info error\n" + JSON.stringify(reqObj, null, "  "));
@@ -137,6 +161,11 @@ class SPListREST {
 		});
 	} // _init()
 
+	/**
+	 * @method getLookupFieldsInfo -- builds this.lookupFieldsInfo when a lib/list has lookup fields
+	 * 		THIS FUNCTION MAY NEED DEBUGGING
+	 * @returns
+	 */
 	getLookupFieldsInfo() {
 		return new Promise((resolve, reject) => {
 	// first get the site pedigree of current site
@@ -145,35 +174,51 @@ class SPListREST {
 				site: this.site
 			});
 			siteREST.init().then(() => {
-				siteREST.getSitePedigree(null).then((pedigree: TSiteInfo) => {
-					let y: TSiteInfo = pedigree, 
-							site: string, 
-							siteIds: string[] = [], 
-							requests: Promise<any>[] = [];
+				siteREST.getSitePedigree(null).then(({pedigree, arrayPedigree}) => {
+	// after site pedigree, collect the lookup fields and lists as
+					let lookupFields: any[] = [],
+						requests: Promise<any>[] = [];
+
+					this.sitePedigree = pedigree;
+					this.arrayPedigree = arrayPedigree;
 					for (let field of this.fields)
-						if (field.FieldTypeKind == 7 && // lookup type, so get the data
-								(site = siteIds.find((elem: any) => elem.id == field.LookupWebId) as string) == null) {
-							
-						}
-		
-					for (let field of this.fields)
+						if (field.FieldTypeKind == 7 && field.FromBaseType == false) // lookup type, so get the data
+							lookupFields.push(field);
+
+					for (let field of lookupFields)
 						requests.push(this.retrieveLookupFieldInfo({
+							useFunction: "siteREST",
 							LookupWebId: field.LookupWebId,
 							LookupList: field.LookupList,
 							LookupField: field.LookupField
 						}));
 
-					Promise.all(requests).then((responses: {
-						id: string;  // this is Id value of the item that is the lookup Field value
-						choiceValue: string;  // this is value of LookupField passed as arg	
-					}[]) => {
+					Promise.all(requests).then((responses) => {
 						console.log("responses count = " + responses.length + "\n" +
 							JSON.stringify(responses, null, "  "));
-						for (let i of responses)
-							this.lookupFieldInfo.push({
-								fieldName: "", // this needs work
+						for (let i of responses) {
+							let data: any[] = i.data,
+									fld: any,
+									choices: {id: number; value: string }[] = [],
+									idx: number;
+
+							found1:
+							for (fld of lookupFields)
+								for (let datum of data)
+									if (datum[fld.Title] != null)
+										break found1;
+							idx = this.lookupFieldInfo.push({
+								fieldDisplayName: fld.Title,
+								fieldInternalName: fld.InternalName,
 								choices: null
-							});
+							}) - 1;
+							for (let fldVal of data)
+								choices.push({
+									id: fldVal.Id,
+									value: fldVal[fld.InternalName]
+								});
+							this.lookupFieldInfo[idx].choices = choices;
+						}
 						resolve(true);
 					}).catch((response) => {
 						reject(response);
@@ -185,8 +230,6 @@ class SPListREST {
 			}).catch((response) => {
 				reject(response);
 			});
-
-
 		});
 	}
 
@@ -201,25 +244,27 @@ class SPListREST {
  * @returns {Promise} the array of values that form the choice list of the lookup
  */
 	retrieveLookupFieldInfo(parameters: {
-		useFunction?: string;
+		useFunction?: "enumWebs" | "siteREST";
 		LookupWebId: string;
 		LookupList: string;
 		LookupField: string;
 	}): Promise<any> {
 		return new Promise((resolve, reject) => {
-			if (parameters.useFunction == "enumWebs") {
-	/*
-				enumWebs(
-					["Url"],
-					(allwebs) => {
-						for (let web of allwebs)
-							console.log(web.get_title());
-					},
-					(sender, args) => {
-						console.log(args.get_message());
-					}
-				); */
-			} else if (parameters.useFunction == "siteREST") {
+			if (parameters.useFunction == "siteREST") {
+				let site: SPRESTTypes.TSiteInfo = {},
+					lookupListId = parameters.LookupList.replace(/[{}]/g, "");
+
+				for (site of this.arrayPedigree)
+					if (site.id == parameters.LookupWebId)
+						break;
+				SPListREST.httpRequestPromise({
+					url: this.protocol + this.server + site.serverRelativeUrl + "/_api/lists(guid'" +
+							lookupListId + "')/items?$select=Id," + parameters.LookupField
+				}).then((response) => {
+					resolve(response);
+				}).catch((response) => {
+					reject(response);
+				});
 
 			} else // no useFunction specified
 				$.ajax({  // use SharePoint's search query tool
@@ -229,9 +274,9 @@ class SPListREST {
 					headers: SPListREST.stdHeaders,
 					success: (data) => {
 						// the data returned are the lookup choice values in the target
-						let siteName, 
-							lookupList, 
-							siteResult = null, 
+						let siteName,
+							lookupList,
+							siteResult = null,
 							lookupChoices: {
 								id: string;  // item.Id
 								choiceValue: string  // item[parameters.LookupField]
@@ -239,7 +284,7 @@ class SPListREST {
 								searchRows = data.d.query.PrimaryQueryResult.RelevantResults.Table.Rows.results,
 								// this variabled function will get the choices from the lookup field
 								collectItemData = (url: string) => {
-									// this named function will be used 
+									// this named function will be used
 									$.ajax({
 										url: url,
 										method: "GET",
@@ -247,12 +292,12 @@ class SPListREST {
 										success: (data) => {
 											for (let item of data.d.results)
 												lookupChoices.push({
-													id: item.Id, 
+													id: item.Id,
 													choiceValue: item[parameters.LookupField]
 												});
 											if (data.d.__next)
 												collectItemData(data.d.__next);
-											else 
+											else
 												resolve(lookupChoices);
 										},
 										error: (reqObj) => {
@@ -279,9 +324,9 @@ class SPListREST {
 						}
 						// if the loop found the result and set it, this condition is ready
 						if (siteResult != null) {
-							siteName = ParseSPUrl(siteResult)!.siteFullPath;
+							siteName = SPRESTSupportLib.ParseSPUrl(siteResult)!.siteFullPath;
 							lookupList = parameters.LookupList.match(/^\{?([^\}]+)\}?$/)![1];
-							collectItemData(this.protocol + this.server + siteName + "/_api/web/lists(guid'" + lookupList + 
+							collectItemData(this.protocol + this.server + siteName + "/_api/web/lists(guid'" + lookupList +
 										"')/items?$select=Id," + parameters.LookupField);
 						}
 						resolve(null); // could not find a result in search
@@ -292,54 +337,15 @@ class SPListREST {
 				});
 		});
 	}
-/*
-		function enumWebs(propertiesToRetrieve, success, error)	{
-				let context, rootWeb, colPropertiesToRetrieve, enumWebsInner,
-				level = 0, result = [];
 
-			if (typeof SP == "undefined")
-				throw "'sp.runtime.js' or 'sp.js' are not included";
-			context = SP.ClientContext.get_current();
-			rootWeb = context.get_site().get_rootWeb();
-			context.load(rootWeb, propertiesToRetrieve);
-			result.push(rootWeb);
-			colPropertiesToRetrieve = String.format("Include({0})", propertiesToRetrieve);
-			enumWebsInner = (web, result, success, error) => {
-				let context = web.get_context(),
-					webs = web.get_webs();
-
-				level++;
-				context.load(webs, colPropertiesToRetrieve);
-				context.executeQueryAsync(
-					() => {
-						let web;
-						for (let i = 0; i < webs.get_count(); i++) {
-							web = webs.getItemAtIndex(i);
-							result.push(web);
-							console.log("in loop --  level = " + level);
-							enumWebsInner(web, result, success, error);
-						}
-						level--;
-						if (level == 0 && success) {
-							console.log("SUCCESS---YES!!!");
-							success(result);
-						}
-					},
-					error
-				);
-			};
-			enumWebsInner(rootWeb, result, success, error);
-		}
-	}
-*/
 	/**
 	 * @method getLookupFieldValue -- retrieves as a Promise the value to set up for a lookup field
 	 * @param {string} fieldName --
 	 * @returns the value to set for the lookup field, null if not available
 	 */
-	getLookupFieldValue(fieldName: string, fieldValue: string): string | null {
+	getLookupFieldValue(fieldName: string, fieldValue: string): number | null {
 		for (let info of this.lookupFieldInfo)
-			if (info.fieldName == fieldName)
+			if (info.fieldDisplayName == fieldName)
 				for (let i: number = 0; i < info.choices!.length; i++)
 					if (fieldValue == info.choices![i].value)
 						return info.choices![i].id;
@@ -352,9 +358,9 @@ class SPListREST {
 	 * @param {object} body -- usually the XMLHTTP request body passed to a POST-type request
 	 * @returns -- a Promise (this is an async call)
 	 */
-	fixBodyForSpecialFields(body: THttpRequestBody) {
-		let newBody: {[key:string]: any}, 
-				value: string | null;
+	fixBodyForSpecialFields(body: SPRESTTypes.THttpRequestBody) {
+		let newBody: {[key:string]: any},
+				value: number | null;
 
 		return new Promise((resolve, reject) => {
 			if (this.lookupInfoCached == true) {
@@ -366,7 +372,7 @@ class SPListREST {
 					else
 						newBody[key + "Id"] = value;
 				resolve(newBody);
-			} else 
+			} else
 // with this block, we go to the server to get lookup values
 				this.getFields({
 					filter: "FromBaseType eq false"
@@ -376,7 +382,7 @@ class SPListREST {
 					// get the lists fields and store the info
 					if (this.fields)
 						this.fields.concat(response.data.d.results);
-					else 
+					else
 						this.fields = response.data.d.results;
 					this.fieldInfo = [ ];
 					// this will be multiple requests, so find Promise.all()
@@ -392,7 +398,8 @@ class SPListREST {
 									LookupField: fld.LookupField
 								}).then((response: any) => {
 									this.lookupFieldInfo.push({
-										fieldName: fld.InternalName,
+										fieldDisplayName: fld.Title,
+										fieldInternalName: fld.InternalName,
 										choices: response
 									});
 								}).catch((response) => {
@@ -409,7 +416,7 @@ class SPListREST {
 									intName: fld.InternalName,
 									boolean: true
 								}));
-							} else 
+							} else
 								resolve(null); // not a lookup field, so don't store it
 						}));
 					Promise.all(requests).then(() => {
@@ -421,14 +428,14 @@ class SPListREST {
 								for (let fld of this.fields)
 									if (fld.InternalName == key) {
 										newBody[key] = {
-											__metadata: { 
-												type: fld.Choices.__metadata.type 
-											}, 
+											__metadata: {
+												type: fld.Choices.__metadata.type
+											},
 											results: body[key]
 										};
 										break;
 									}
-							} else if (typeof body[key] == "boolean" || 
+							} else if (typeof body[key] == "boolean" ||
 										(typeof body[key] == "string" && body[key].search(/Y|Yes|No|N|true|false/i) == 0)) {
 								for (let fld of this.fieldInfo)
 									if (fld.intName == key)
@@ -454,7 +461,7 @@ class SPListREST {
 	}
 
 	// if parameters.success not found the request will be SYNCHRONOUS and not ASYNC
-	static httpRequest(elements: THttpRequestParams) {
+	static httpRequest(elements: SPRESTTypes.THttpRequestParams) {
 		if (!elements.successCallback)
 			throw "HTTP Request for SPListREST requires defining 'successCallback' in parameter 'elements'";
 		if (!elements.errorCallback)
@@ -476,7 +483,7 @@ class SPListREST {
 				url: match[1] + "/contextinfo",
 				method: "POST",
 				headers: SPListREST.stdHeaders,
-				success: (data: TSPResponseData) => {
+				success: (data: SPRESTTypes.TSPResponseData) => {
 					elements.headers!["X-RequestDigest"] = data.FormDigestValue ? data.FormDigestValue :
 						data.d!.GetContextWebInformation!.FormDigestValue;
 					$.ajax({
@@ -484,7 +491,7 @@ class SPListREST {
 						method: elements.method,
 						headers: elements.headers,
 						data: elements.body as any ?? elements.data as any,
-						success: (data: TSPResponseData, status: string, requestObj: JQueryXHR) => {
+						success: (data: SPRESTTypes.TSPResponseData, status: string, requestObj: JQueryXHR) => {
 							elements.successCallback!(data, status, requestObj);
 						},
 						error: (requestObj: JQueryXHR, status: string, thrownErr: string) => {
@@ -504,10 +511,10 @@ class SPListREST {
 				method: elements.method,
 				headers: elements.headers,
 				data: elements.body as any ?? elements.data as any,
-				success: (data: TSPResponseData, status: string, requestObj: JQueryXHR) => {
+				success: (data: SPRESTTypes.TSPResponseData, status: string, requestObj: JQueryXHR) => {
 						 if (data.d && data.d.__next)
 							  this.RequestAgain(
-									data.d.__next, 
+									data.d.__next,
 									data.d.results as any[]
 							  ).then((response: any) => {
 									elements.successCallback!(response);
@@ -550,7 +557,7 @@ class SPListREST {
 		});
 	}
 
-	static httpRequestPromise(parameters: THttpRequestParamsWithPromise) {
+	static httpRequestPromise(parameters: SPRESTTypes.THttpRequestParamsWithPromise) {
 		return new Promise((resolve, reject) => {
 			SPListREST.httpRequest({
 				setDigest: parameters.setDigest,
@@ -558,7 +565,7 @@ class SPListREST {
 				method: parameters.method,
 				headers: parameters.headers,
 				data: parameters.data ?? parameters.body,
-				successCallback: (data: TSPResponseData, status: string | undefined, 
+				successCallback: (data: SPRESTTypes.TSPResponseData, status: string | undefined,
 							reqObj: JQueryXHR | undefined) => {
 					resolve({data: data, message: status, reqObj: reqObj});
 				},
@@ -572,7 +579,7 @@ class SPListREST {
 	// query: [optional]
 	getProperties (parameters: any): Promise<any> {
 		return new Promise((resolve, reject) => {
-			let query: string = constructQueryParameters(parameters);
+			let query: string = SPRESTSupportLib.constructQueryParameters(parameters);
 
 			SPListREST.httpRequestPromise({
 				url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')" + query,
@@ -599,18 +606,24 @@ class SPListREST {
 	 * 		itemId: specific ID of item data to be retrieved
 	 * 		lowId: starts a range with the low ID
 	 * 		highId: starts a range with the high ID
-	 * 	} parameters 
+	 * 	} parameters
 	 * @returns {Promise} HTTP Request
 	 */
 	getListItemData(parameters: {
 		itemId: number;
 		lowId?: number;
 		highId?: number;
+		select?: string | null,
+		expand?: string | null,
+		filter?: string | null,
+		selectDisplay?: string[],
 		[key: string]: any;
 	}): Promise<any> {
 		return new Promise((resolve, reject) => {
-			let filter: string = "";
+			let query: string = "",
+					filter: string = "";
 
+			if (parameters.selectDisplay && parameters.selectDisplay.length > 0)
 			if (parameters && parameters.lowId)
 				filter += "Id ge " + parameters.lowId as string;
 			if (parameters && parameters.lowId && parameters.highId)
@@ -620,10 +633,23 @@ class SPListREST {
 					filter += " and ";
 			if (parameters && parameters.highId && parameters.highId > 0)
 				filter += "Id le " + parameters.highId as string;
+			if (parameters.filter)
+				filter = "(" + parameters.filter + ") and (" + filter + ")";
+			if (parameters.select && parameters.select.length > 0)
+				query = "?$select=" + parameters.select;
+			if (parameters.expand && parameters.expand.length > 0)
+				if (query.length > 0)
+					query += "&$expand=" + parameters.expand;
+				else
+					query = "?$expand=" + parameters.expand;
+			if (filter.length > 0)
+				if (query.length > 0)
+					query += "&$filter=" + filter;
+				else
+					query = "?filter=" + filter;
 			SPListREST.httpRequestPromise({
-				url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/items" + 			
-						(parameters && parameters.itemId > 0 ? "(" + parameters.itemId + ")" : "") + 
-						(filter.length > 0 ? "?$filter=" + filter : "")
+				url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/items" +
+						(parameters && parameters.itemId > 0 ? "(" + parameters.itemId + ")" : "") + query
 			}).then((response: any) => {
 				if (response.data.__next)
 					this.getListItemData(response.data.__next);
@@ -647,6 +673,22 @@ class SPListREST {
 		return this.getListItemData({itemId: -1});
 	}
 
+	getListItemsWithQuery(parameters: {
+		select: string | null,
+		expand: string | null,
+		filter: string | null,
+		selectDisplay?: string[] // this must be used to get columns/fields data with that display name
+	}): Promise<any> {
+		let newParameters = {
+			select: parameters.select,
+			expand: parameters.expand,
+			filter: parameters.filter,
+			selectDisplay: parameters.selectDisplay,
+			itemId: -1
+		};
+		return this.getListItemData(newParameters);
+	}
+
 	getAllListItemsOptionalQuery(parameters: any): Promise<any> {
 		return this.getListItems(parameters);
 	}
@@ -657,17 +699,17 @@ class SPListREST {
 
 	// @param {object} parameters - should have at least {body:,success:}
 	// body format: {string} " 'fieldInternalName': 'value', ...}
-	createListItem(item: {body: THttpRequestBody}) {
-		let body: THttpRequestBody | string = item.body;
-		
+	createListItem(item: {body: SPRESTTypes.THttpRequestBody}) {
+		let body: SPRESTTypes.THttpRequestBody | string = item.body;
+
 		if (!body || body == null)
 			throw "The object argument to createListItem() must have a 'body' property";
 //		if (this.checkEntityTypeProperty(body, "item") == false)
 //			body["__SetType__"] = this.listItemEntityTypeFullName;
-		body = formatRESTBody(body);
+		body = SPRESTSupportLib.formatRESTBody(body);
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + 
+			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
 					"')/items",
 			method: "POST",
 			body: body
@@ -675,10 +717,10 @@ class SPListREST {
 	}
 
 	/**
-	 * 
+	 *
 	 * @param {arrayOfObject} items -- objects should be objects whose properties are fields
 	 * 		within the lists and using Internal name property of field
-	 * @returns a promise 
+	 * @returns a promise
 	 */
 	createListItems(items: any[], useBatch: boolean) {
 		if (useBatch == true) {
@@ -689,10 +731,10 @@ class SPListREST {
 					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/items",
 					body: item.body
 				});
-			return batchRequestingQueue({
+			return SPRESTSupportLib.batchRequestingQueue({
 				host: this.server,
 				path: this.site,
-				AllHeaders: { 
+				AllHeaders: {
 					"Content-Type": "application/json;odata=verbose"
 				},
 				AllMethods: "POST"
@@ -700,7 +742,7 @@ class SPListREST {
 		}
 	// the alternative to batching
 		return new Promise((resolve, reject) => {
-			serialSPProcessing(this.createListItem, items).then((response: any) => {
+			SPRESTSupportLib.serialSPProcessing(this.createListItem, items).then((response: any) => {
 				resolve(response);
 			}).catch((response: any) => {
 				reject(response);
@@ -711,22 +753,22 @@ class SPListREST {
 	/**
 	 * @method updateListItem -- modifies existing list item
 	 * @param {object} parameters -- requires 2 parameters {itemId:, body: [JSON] }
-	 * @returns 
+	 * @returns
 	 */
 	updateListItem(parameters: {
 		itemId: number;
-		body: THttpRequestBody;
+		body: SPRESTTypes.THttpRequestBody;
 	}) {
-		let body: THttpRequestBody | string = parameters.body;
-		
+		let body: SPRESTTypes.THttpRequestBody | string = parameters.body;
+
 		return new Promise((resolve, reject) => {
-			this.fixBodyForSpecialFields(body as THttpRequestBody).then((body: any) => {
-				if (checkEntityTypeProperty(body, "item") == false)
+			this.fixBodyForSpecialFields(body as SPRESTTypes.THttpRequestBody).then((body: any) => {
+				if (SPRESTSupportLib.checkEntityTypeProperty(body, "item") == false)
 					body["__SetType__"] = this.listItemEntityTypeFullName;
-				body = formatRESTBody(body);
+				body = SPRESTSupportLib.formatRESTBody(body);
 				SPListREST.httpRequestPromise({
 					setDigest: true,
-					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + 
+					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
 								"')/items(" + parameters.itemId + ")",
 					method: "POST",
 					headers: {
@@ -751,14 +793,14 @@ class SPListREST {
 			// need to re-configure
 			for (let item of itemsArray)
 				requests.push({
-					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/items(" + 
+					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/items(" +
 							item.id + ")",
 					body: item.body
 				});
-			return batchRequestingQueue({
+			return SPRESTSupportLib.batchRequestingQueue({
 				host: this.server,
 				path: this.site,
-				AllHeaders: { 
+				AllHeaders: {
 					"Content-Type": "application/json;odata=verbose",
 					"IF-MATCH": "*"
 				},
@@ -767,7 +809,7 @@ class SPListREST {
 		}
 	// the alternative to batching
 		return new Promise((resolve, reject) => {
-			serialSPProcessing(this.updateListItem, itemsArray).then((response: any) => {
+			SPRESTSupportLib.serialSPProcessing(this.updateListItem, itemsArray).then((response: any) => {
 				resolve(response);
 			}).catch((response: any) => {
 				reject(response);
@@ -806,7 +848,7 @@ class SPListREST {
 			else
 				SPListREST.httpRequest({
 					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')",
-					successCallback: (data: TSPResponseData) => {
+					successCallback: (data: SPRESTTypes.TSPResponseData) => {
 						resolve(data.d!.ItemCount);
 					},
 					errorCallback: (reqObj: JQueryXHR) => {
@@ -923,7 +965,7 @@ class SPListREST {
 	getFolderFilesOptionalQuery(parameters: {
 		folderPath: string;
 	}): Promise<any> {
-		let query: string = constructQueryParameters(parameters);
+		let query: string = SPRESTSupportLib.constructQueryParameters(parameters);
 		return SPListREST.httpRequestPromise({
 			url: this.apiPrefix +	"/web/getFolderByServerRelativeUrl('" + this.baseUrl +
 						parameters.folderPath + "')/Files" + query,
@@ -957,7 +999,7 @@ class SPListREST {
 		if (!parameters.itemId)
 			throw "Method requires 'parameters.itemId' to be defined";
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + 
+			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
 						"')/items(" + parameters.itemId + ")",
 		});
 	}
@@ -966,12 +1008,12 @@ class SPListREST {
 	 * @param {number|string} parameters.itemId - ID of item whose data is wanted
 	 * @returns {Object} data about the file and metadata of the library item
 	 */
-	
+
 	getDocLibItemFileAndMetaData(parameters: {itemId: number}): Promise<any> {
 		if (!parameters.itemId)
 			throw "Method requires 'parameters.itemId' to be defined";
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + 
+			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
 					"')/items(" + parameters.itemId + ")/File?$expand=ListItemAllFields",
 		});
 	}
@@ -985,7 +1027,7 @@ class SPListREST {
 	*/
 	uploadItemToDocLib(parameters: {
 		fileName: string;
-		body: TXmlHttpRequestData;
+		body: SPRESTTypes.TXmlHttpRequestData;
 		folderPath: string;
 		willOverwrite: boolean;
 	}): Promise<any> {
@@ -1020,7 +1062,7 @@ class SPListREST {
 			})
 		});
 	}
-	
+
 /*/
 	/**
 	required arguments as parameters properties:
@@ -1028,7 +1070,7 @@ class SPListREST {
 	.url   required string which is URL representing the link
 	.fileType   required string
 	.willOverwrite [optional, default = false]
-	
+
 	createLinkToDocItemInDocLib(parameters) {
 		return new Promise(function (resolve, reject) {
 			if (!this.linkToDocumentContentTypeId) {
@@ -1048,7 +1090,7 @@ class SPListREST {
 	}
 	/**
 	 *  helper function for one above
-	
+
 	continueCreateLinkToDocItemInDocLib(parameters) {
 		if (!(parameters.fileName || parameters.itemName))
 			throw "Method requires 'parameters.fileName' or 'parameters.itemName' " +
@@ -1072,8 +1114,8 @@ class SPListREST {
 		});
 	}
 /*/
-	
-	/** 
+
+	/**
 	 * @method checkOutDocLibItem  checks out a document library item where checkout is required
 	 * @param {string} .fileName or .itemName -- required which will be name applied to file data
 	 * @param {string} .folderPath -- optional, if omitted, uploaded to root folder
@@ -1108,8 +1150,8 @@ class SPListREST {
 			method: "POST"
 		});
 	}
-	
-	
+
+
 	/**
 	 * @method checkInDocLibItem -- check in one or more files
 	 * @param {object:
@@ -1118,15 +1160,15 @@ class SPListREST {
 	 * 				must be anyon of 6 strings: "[mM]inor" (0), "[mM]ajor" (1), "[oO]verwrite" (2)
 	 *       {string} .checkInComment -- applied to all files if multipe
 	 			* } parameters -- the following properties are recognized
-	 * @returns Promise 
+	 * @returns Promise
 	 */
 	checkInDocLibItem(parameters: {
 		itemNames: string[],
-		checkInType?: TSPDocLibCheckInType,
+		checkInType?: SPRESTTypes.TSPDocLibCheckInType,
 		checkInComment?: string
 	}): Promise<any> {
 		// checkintype = 0: minor version, = 1: major version, = 2: overwrite
-		let requests: {url:string;body?:{}}[] = [], 
+		let requests: {url:string;body?:{}}[] = [],
 			checkinType: number;
 		if (!parameters.itemNames || parameters.itemNames.length == 0)
 			throw "Method requires 'parameters.itemNames' as non-zero length arrays of strings";
@@ -1151,15 +1193,15 @@ class SPListREST {
 			parameters.checkInComment = "";
 		for (let itemName of parameters.itemNames)
 			requests.push({
-				url: this.apiPrefix + "/web/GetFileByServerRelativeUrl('" + itemName + 
+				url: this.apiPrefix + "/web/GetFileByServerRelativeUrl('" + itemName +
 						"')/CheckIn(comment='" + parameters.checkInComment + "',checkintype=" + checkinType + ")"
 			});
-		return batchRequestingQueue({
+		return SPRESTSupportLib.batchRequestingQueue({
 			AllMethods: "POST"
-		} as IBatchHTTPRequestParams, requests);
+		} as SPRESTTypes.IBatchHTTPRequestParams, requests);
 	}
 
-	/** 
+	/**
 	 * @method discardCheckOutDocLibItem
 	 * @param {Object} parameters
 	 * @param {string} parameters.(fileName|itemName) - name of file checked out
@@ -1184,12 +1226,12 @@ class SPListREST {
 			method: "POST"
 		});
 	}
-	
-	
+
+
 	renameItem(parameters: any) {
 		return this.renameFile(parameters);
 	}
-	
+
 	renameFile(parameters: {
 		itemId: number;
 		itemName: string;
@@ -1197,20 +1239,20 @@ class SPListREST {
 	}): Promise<any> {
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + 
+			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
 					"')/items(" + parameters.itemId + ")",
 			method: "POST",
 			headers: {
 				"X-HTTP-METHOD": "MERGE",
 				"IF-MATCH": "*" // can also use etag
 			},
-			body: formatRESTBody({
+			body: SPRESTSupportLib.formatRESTBody({
 				FileLeafRef: parameters.itemName ? parameters.itemName : parameters.newName
 			}),
 		});
 	}
-	
-	
+
+
 	// 3 arguments are necessary:
 	// .itemId: ID of file item
 	// .newFileName or .newName: name to be used in rename
@@ -1232,7 +1274,7 @@ class SPListREST {
 			} as any
 		});
 	}
-	
+
 	/** @method updateLibItemWithCheckout
 	 * @param {Object} parameters
 	 * @param {string|number} parameters.(fileName|itemId) - id of lib item or name of file checked out
@@ -1241,7 +1283,7 @@ class SPListREST {
 		itemId: number;
 		fileName: string;
 		body: string;
-		checkInType?: TSPDocLibCheckInType;
+		checkInType?: SPRESTTypes.TSPDocLibCheckInType;
 	}) {
 		let thisInstance = this;
 		return new Promise(function (resolve, reject) {
@@ -1272,7 +1314,7 @@ class SPListREST {
 				});
 		});
 	}
-	
+
 	/** @method continueupdateLibItemWithCheckout
 	 * @param {Object} parameters
 	 * @param {string|number} parameters.(fileName|itemId) - id of lib item or name of file checked out
@@ -1280,7 +1322,7 @@ class SPListREST {
 	continueupdateLibItemWithCheckout(parameters: {
 		itemId: number;
 		fileName: string;
-		checkInType?: TSPDocLibCheckInType;
+		checkInType?: SPRESTTypes.TSPDocLibCheckInType;
 		body: string;
 	}) {
 		let thisInstance = this;
@@ -1290,7 +1332,7 @@ class SPListREST {
 			}).then(() => {
 				SPListREST.httpRequestPromise({
 					setDigest: true,
-					url: thisInstance.apiPrefix + "/web/lists(guid'" + thisInstance.listGuid + 
+					url: thisInstance.apiPrefix + "/web/lists(guid'" + thisInstance.listGuid +
 							"')/items(" + parameters.itemId + ")",
 					method: "POST",
 					body: "{ '__metadata': { 'type': '" +
@@ -1317,7 +1359,7 @@ class SPListREST {
 			});
 		});
 	}
-		
+
 	/** @method discardCheckOutDocLibItem
 	 * @param {Object} parameters
 	 * @param {string} parameters.(fileName|itemName) - name of file checked out
@@ -1325,11 +1367,11 @@ class SPListREST {
 	 */
 	updateDocLibItemMetadata(parameters: {
 		itemId: number;
-		body: THttpRequestBody
+		body: SPRESTTypes.THttpRequestBody
 	}) {
 		let thisInstance = this;
 		return new Promise(function (resolve, reject) {
-			let itemName: string, 
+			let itemName: string,
 					majorResponse: any;
 			thisInstance.getDocLibItemFileAndMetaData({
 				itemId: parameters.itemId
@@ -1358,7 +1400,7 @@ class SPListREST {
 			});
 		});
 	}
-	
+
 	/**
 	required arguments as parameters properties:
 	.sourceFileName [required]  the path to the source name
@@ -1392,7 +1434,7 @@ class SPListREST {
 			});
 		});
 	}
-		
+
 	// .path
 	// .folderPath
 	// .fileName
@@ -1420,8 +1462,8 @@ class SPListREST {
 			method: "POST"
 		});
 	}
-	
-	
+
+
 /*******************************************************************************
  *     LIST PROPERTY / STRUCTURE REQUESTS: fields, content types, views
  *******************************************************************************/
@@ -1437,19 +1479,19 @@ class SPListREST {
 	 *               query is optional
 	 * @returns -- will return to then() an array of results representing fields and their properties
 	 */
-	getField(parameters: {
-		fields: {name?: string; guid?: string;}[];
+	getField(parameters?: {
+		fields?: {name?: string; guid?: string;}[];
 		filter?: string;
 	} | undefined) {
 		let query = "", filter;
-		
+
 		if (parameters && parameters.fields != null && parameters.fields.length > 0) {
 			if (parameters.filter)
 				filter = parameters.filter;
 			else
 				filter = "";
 			for (let fld of parameters.fields) {
-				if (filter.length > 0) 
+				if (filter.length > 0)
 					filter += " or ";
 				if (fld.name)
 					filter += "Title eq '" + fld.name + "'";
@@ -1464,13 +1506,16 @@ class SPListREST {
 		});
 	}
 
-	getFields(parameters?
-		: any): Promise<any> {
+	/**
+	 * @method getFields -- will return information on all list fields
+	 * @returns Promise with data in then() response
+	 */
+	getFields(parameters?: {filter: string;}): Promise<any> {
 		return this.getField(parameters);
 	}
-	
+
 	/**
-	 * 
+	 *
 	 * @param {JSONofParms} fieldProperties 'Title': 'field title', 'FieldTypeKind': FieldType value,
 	 *    Required': 'true/false', 'EnforceUniqueValues': 'true/false','StaticName': 'field name'}
 	 * @returns REST API response
@@ -1482,11 +1527,11 @@ class SPListREST {
 		"EnforceUniqueValues": boolean;
 		"StaticName": string;
 	}): Promise<any> {
-		let body: THttpRequestBody | string = fieldProperties;
-		
-		if (checkEntityTypeProperty(body, "field") == false)
+		let body: SPRESTTypes.THttpRequestBody | string = fieldProperties;
+
+		if (SPRESTSupportLib.checkEntityTypeProperty(body, "field") == false)
 			body.__SetType__ = "SP.Field";
-		body = formatRESTBody(body);
+		body = SPRESTSupportLib.formatRESTBody(body);
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
 			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields",
@@ -1494,32 +1539,32 @@ class SPListREST {
 			body: body
 		});
 	}
-	
+
 	/**
-	 * 	
-	 * @param {arrayOfFieldObject} fields -- this should be an array of the 
+	 *
+	 * @param {arrayOfFieldObject} fields -- this should be an array of the
 	 * 			       objects used to define fields for SPListREST.createField()
-	 * @returns 
+	 * @returns
 	 */
 	createFields(fields: any[]) {
 		// field creation can not occur co-synchronously. One must complete before the
 		// next field creation can begin.
 		return new Promise((resolve, reject) => {
-			let body: THttpRequestBody,
-				requests: IBatchHTTPRequestForm[] = [],
+			let body: SPRESTTypes.THttpRequestBody,
+				requests: SPRESTTypes.IBatchHTTPRequestForm[] = [],
 				responses: string = "";
 
 			for (let fld of fields) {
 				body = fld;
-				if (checkEntityTypeProperty(body, "field") == false)
+				if (SPRESTSupportLib.checkEntityTypeProperty(body, "field") == false)
 					body.__SetType__ = "SP.Field";
 				requests.push({
 					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields",
 					method: "POST",
-					body: JSON.parse(formatRESTBody(body))
+					body: JSON.parse(SPRESTSupportLib.formatRESTBody(body))
 				});
 			}
-			batchRequestingQueue({
+			SPRESTSupportLib.batchRequestingQueue({
 				host: this.server,
 				path: this.site,
 				AllHeaders: SPListREST.stdHeaders,
@@ -1543,7 +1588,7 @@ class SPListREST {
 		currentName?: string;
 		newName: string | undefined;
 	}) {
-		let body: THttpRequestBody;
+		let body: SPRESTTypes.THttpRequestBody;
 
 		if (!parameters.oldName && !parameters.currentName)
 			throw "A parameter for 'oldName' or 'currentName' was not found";
@@ -1554,21 +1599,21 @@ class SPListREST {
 		body = {
 			"Title": parameters.newName
 		};
-		if (checkEntityTypeProperty(body, "field") == false)
+		if (SPRESTSupportLib.checkEntityTypeProperty(body, "field") == false)
 			body["__SetType__"] = "SP.Field";
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + 
+			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
 					"')/fields/GetByTitle('" + parameters.currentName + "')",
 			method: "POST",
 			headers: {
 				"X-HTTP-METHOD": "MERGE",
 				"IF-MATCH": "*"
 			},
-			body: formatRESTBody(body)
+			body: SPRESTSupportLib.formatRESTBody(body)
 		});
 	}
-	
+
 	/** @method .updateChoiceTypeField
 	 *       @param {Object} parameters
 	 *       @param {string} parameters.id - the field guid/id to be updated
@@ -1588,7 +1633,7 @@ class SPListREST {
 				"either array or string";
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists(guid'" + 
+			url: this.apiPrefix + "/web/lists(guid'" +
 						this.listGuid + "')/fields(guid'" + parameters.id + "')",
 			method: "POST",
 			headers: {
@@ -1617,14 +1662,14 @@ class SPListREST {
 		 query?: {filter: string;}
 	 } | undefined): Promise<any> {
 		let query = "", filter;
-		
+
 		if (parameters && parameters.contentTypes != null && parameters.contentTypes.length > 0) {
 			if (parameters.query && parameters.query.filter)
 				filter = parameters.query.filter;
 			else
 				filter = "";
 			for (let ct of parameters.contentTypes) {
-				if (filter.length > 0) 
+				if (filter.length > 0)
 					filter += " or ";
 				if (ct.name)
 					filter += "Title eq '" + ct.name + "'";
@@ -1633,19 +1678,19 @@ class SPListREST {
 			}
 		}
 		if (parameters && parameters.query)
-			query = constructQueryParameters(parameters.query);
+			query = SPRESTSupportLib.constructQueryParameters(parameters.query);
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists(guid'" + 
+			url: this.apiPrefix + "/web/lists(guid'" +
 					this.listGuid + "')/contentTypes" + query,
 			method: "GET"
 		});
 	}
 
 	/**
-	 * 	
-	 * @param {arrayOfcontentTypeObject} parameters -- this should be an array of the 
+	 *
+	 * @param {arrayOfcontentTypeObject} parameters -- this should be an array of the
 	 * 			       object parameter passed to .createcontentType
-	 * @returns 
+	 * @returns
 	 */
 /*/
 	createContentTypes(contentTypes) {
@@ -1660,7 +1705,7 @@ class SPListREST {
 			});
 		});
 	}
-/**/ 
+/**/
 	/****************  Views  ****************************/
 	/**
 	 * @method getView -- returns one or more contentType objects, with properties all or selected, and possible
@@ -1680,16 +1725,16 @@ class SPListREST {
 			query?: {
 				filter: string;
 			}}): Promise<any> {
-		let query:string = "", 
+		let query:string = "",
 			filter: string;
-		
+
 		if (parameters && parameters.views != null && parameters.views.length > 0) {
 			if (parameters.query!.filter)
 				filter = parameters.query!.filter;
 			else
 				filter = "";
 			for (let view of parameters.views) {
-				if (filter.length > 0) 
+				if (filter.length > 0)
 					filter += " or ";
 				if (view.name)
 					filter += "Title eq '" + view.name + "'";
@@ -1698,25 +1743,25 @@ class SPListREST {
 			}
 		}
 		if (parameters && parameters.query)
-			query = constructQueryParameters(parameters.query);
+			query = SPRESTSupportLib.constructQueryParameters(parameters.query);
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists(guid'" + 
+			url: this.apiPrefix + "/web/lists(guid'" +
 					this.listGuid + "')/views" + query,
 			method: "GET"
 		});
 	}
 
 	/**
-	 * 
+	 *
 	 * @param {JSONofParms} viewProperties }
 	 * @returns REST API response
 	 */
-	createView(viewsProperties: THttpRequestBody): Promise<any> {
-		let body: THttpRequestBody | string = viewsProperties;
-		
-		if (checkEntityTypeProperty(body, "view") == false)
+	createView(viewsProperties: SPRESTTypes.THttpRequestBody): Promise<any> {
+		let body: SPRESTTypes.THttpRequestBody | string = viewsProperties;
+
+		if (SPRESTSupportLib.checkEntityTypeProperty(body, "view") == false)
 			body.__SetType__ = "SP.View";
-		body = formatRESTBody(body);
+		body = SPRESTSupportLib.formatRESTBody(body);
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
 			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/views",
@@ -1724,10 +1769,10 @@ class SPListREST {
 			body: body
 		});
 	}
-	
+
 	setView(viewName: string, fieldNames: string[]) {
 		let viewFields = "";
-		
+
 		for (let field of fieldNames)
 			viewFields += "<FieldRef Name=\"" + field + "\"/>";
 
@@ -1736,28 +1781,28 @@ class SPListREST {
 			url: this.apiPrefix + "/web/GetList(@a1)/Views(@a2)/SetViewXml()?@a1='" +
 					this.serverRelativeUrl + "'&@a2='" + this.listGuid + "'",
 			method: "POST",
-			body: {"ViewXml": "<View Name=\"{" + createGuid() + "}\" DefaultView=\"FALSE\" MobileView=\"TRUE\" " + 
-					"MobileDefaultView=\"TRUE\" Type=\"HTML\" DisplayName=\"All Items\" " + 
-					"Url=\"" + this.serverRelativeUrl + "/" + viewName + ".aspx\" Level=\"1\" " + 
-					"BaseViewID=\"1\" ContentTypeID=\"0x\" ImageUrl=\"/_layouts/15/images/generic.png?rev=47\">" + 
-					"<Query><OrderBy><FieldRef Name=\"ID\" Ascending=\"FALSE\"/></OrderBy></Query>" + 
-					"<ViewFields><FieldRef Name=\"Title\"/><FieldRef Name=\"Created\"/><FieldRef Name=\"Modified\"/>" + 
-					viewFields + "</ViewFields>" + 
-					"<RowLimit Paged=\"TRUE\">30</RowLimit><JSLink>clienttemplates.js</JSLink><XslLink Default=\"TRUE\">main.xsl</XslLink>" + 
+			body: {"ViewXml": "<View Name=\"{" + SPRESTSupportLib.createGuid() + "}\" DefaultView=\"FALSE\" MobileView=\"TRUE\" " +
+					"MobileDefaultView=\"TRUE\" Type=\"HTML\" DisplayName=\"All Items\" " +
+					"Url=\"" + this.serverRelativeUrl + "/" + viewName + ".aspx\" Level=\"1\" " +
+					"BaseViewID=\"1\" ContentTypeID=\"0x\" ImageUrl=\"/_layouts/15/images/generic.png?rev=47\">" +
+					"<Query><OrderBy><FieldRef Name=\"ID\" Ascending=\"FALSE\"/></OrderBy></Query>" +
+					"<ViewFields><FieldRef Name=\"Title\"/><FieldRef Name=\"Created\"/><FieldRef Name=\"Modified\"/>" +
+					viewFields + "</ViewFields>" +
+					"<RowLimit Paged=\"TRUE\">30</RowLimit><JSLink>clienttemplates.js</JSLink><XslLink Default=\"TRUE\">main.xsl</XslLink>" +
 					"<Toolbar Type=\"Standard\"/><Aggregations Value=\"Off\"/></View>"} as any
 		});
 	}
 	/**
-	 * 	
-	 * @param {arrayOfFieldObject} views -- this should be an array of the 
+	 *
+	 * @param {arrayOfFieldObject} views -- this should be an array of the
 	 * 			       objects used to define views for SPListREST.createViews()
-	 * @returns 
+	 * @returns
 	 */
 	createViews (views: any[]) {
 		// field creation can not occur co-synchronously. One must complete before the
 		// next field creation can begin.
 		return new Promise((resolve, reject) => {
-			serialSPProcessing(this.createView, views).then((response: any) => {
+			SPRESTSupportLib.serialSPProcessing(this.createView, views).then((response: any) => {
 				resolve(response);
 			}).catch((response: any) => {
 				reject(response);
@@ -1781,7 +1826,7 @@ class SPListREST {
 							return true;
 						else
 							resolve(true);
-					}	
+					}
 				}).catch((response) => {
 					reject(response);
 				});
@@ -1790,4 +1835,4 @@ class SPListREST {
 		});	*/
 	}
 }
-	
+
