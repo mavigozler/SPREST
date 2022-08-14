@@ -33,7 +33,7 @@ class SPUtilityEmailService {
     }) {
         this.server = parameters.server;
         if (this.server.search(/^https?:\/\//) < 0)
-            this.server += "https://" + this.server;
+            this.server = "https://" + this.server;
         this.site = parameters.site;
     }
 

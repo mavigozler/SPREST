@@ -177,27 +177,40 @@ type TFetchInfo = {
 function batchRequestingQueue(
 		elements: IBatchHTTPRequestParams, 
 		allRequests: IBatchHTTPRequestForm[]
-): Promise<TFetchInfo[]> {
+): Promise<{success: TFetchInfo[], error: TFetchInfo[]}> {
 	let allRequestsCopy: IBatchHTTPRequestForm[] = JSON.parse(JSON.stringify(allRequests)),
-		responses: TFetchInfo[] = [],
+		successResponses: TFetchInfo[] = [],
+		errorResponses: TFetchInfo[] = [],
 		subrequests: IBatchHTTPRequestForm[] = [];
 
-	console.log("Queued " + allRequestsCopy.length + " requests");
+	console.log("\n\n=======================" + 
+	              "\nbatchRequestingQueue()" + 
+					  "\n=======================" + 
+					  "\nQueued " + allRequestsCopy.length + " requests");
 	return new Promise((resolve, reject) => {
 		for (let j = 0, i = 0; j < MAX_REQUESTS && i < allRequestsCopy.length; j++, i++)
 			subrequests.push(allRequestsCopy[i]);
 		console.log("Batch of " + subrequests.length + " requests proceeding to network");
 		allRequestsCopy.splice(0, MAX_REQUESTS);
-		singleBatchRequest(elements, subrequests).then((response: TFetchInfo[] | null) => {
-			if (response != null)
-				responses = responses.concat(response);
+		singleBatchRequest(elements, subrequests)
+			.then((response: {success: TFetchInfo[], error: TFetchInfo[]} | null) => {
+			if (response != null) {
+				successResponses = successResponses.concat(response.success);
+				errorResponses = errorResponses.concat(response.error);
+			}
 			if (allRequestsCopy.length > 0)
 				batchRequestingQueue(elements, allRequestsCopy);
 			else
-				resolve(responses);
+				resolve({
+					success: successResponses,
+					error: errorResponses
+				});
 		}).catch((response) => {
-			responses += response;
-			reject(responses);
+			errorResponses = errorResponses.concat(response);
+			reject({
+				success: null,
+				error: errorResponses
+			});
 		});
 	});
 }
@@ -225,7 +238,7 @@ function batchRequestingQueue(
 function singleBatchRequest(
 	elements: IBatchHTTPRequestParams, 
 	requests: IBatchHTTPRequestForm[]
-): Promise<TFetchInfo[] | null> {
+): Promise<{success: TFetchInfo[], error: TFetchInfo[]} | null> {
 	return new Promise((resolve, reject) => {
 		let multipartBoundary = "batch_" + CreateUUID(),
 				changeSetBoundary = "changeset_" + CreateUUID(), 
@@ -235,8 +248,8 @@ function singleBatchRequest(
 				body = "",
 				content = "",
 				headerContent = "",
-				currentMethod = "",
-				previousMethod = "";
+				currentMethod: THttpRequestMethods | "" = "",
+				previousMethod: THttpRequestMethods | "" = "";
 
 		if (elements.AllHeaders)
 			for (let header in elements.AllHeaders)
@@ -248,6 +261,22 @@ function singleBatchRequest(
 			protocol = "" as THttpRequestProtocol;
 		for (let request of requests) {
 			currentMethod = request.method ?? elements.AllMethods ?? "GET";
+// method checking
+			if (currentMethod == "POST" && request.url.search(/\/items\(\d{1,}\)/) >= 0) {
+				resolve({
+					success: [], 
+					error: [{
+						RequestedUrl: request.url,
+						Etag: null,
+						ContentType: request.headers ? request.headers!["Content-Type"] as string : null,
+						HttpStatus: 0,
+						Data: "A URL with POST method was found with a GetById() function used. " +
+							"POST methods create items, while PATCH methods are used to update items.",
+						ProcessedData: []
+					}]
+				});
+				return;
+			}
 			if (currentMethod != "GET") 
 				body += "\n\n--" + changeSetBoundary;
 			else if (previousMethod.length > 0 && previousMethod != "GET" && currentMethod == "GET")
@@ -269,6 +298,9 @@ function singleBatchRequest(
 				headerContent = allHeaders;
 			if (headerContent.search(/Accept:/i) < 0)
 				headerContent += "\nAccept: application/json;odata=nometadata";
+			if (headerContent.search(/Content\-Type/i) < 0 && 
+						(currentMethod == "POST" || currentMethod == "PATCH"))
+				headerContent += "\nContent-Type: application/json;odata=verbose";
 			if (currentMethod == "GET")
 				headerContent = headerContent.replace(/Content\-Type:[^\r\n]+\r?\n?/, "");
 			body += headerContent;
@@ -305,7 +337,8 @@ function singleBatchRequest(
 				console.log(
 					"Content-Type: multipart/mixed; boundary=" + multipartBoundary +
 					"\nAccept: application/json;odata=verbose");
-				console.log("\n\n\n************* ENTIRE BODY CONTENT ***************** \n" + content);
+				console.log("\n\n\n************* START BODY CONTENT ***************** \n" + 
+						content + "\n************** END BODY CONTENT ******************");
 				$.ajax({
 					url: protocol + elements.host + elements.path + "/_api/$batch",
 					method: "POST",
@@ -318,7 +351,8 @@ function singleBatchRequest(
 					},
 					data: content,
 					success: (data: any) => {
-						splitRequests(data, requestedUrls).then((response: TFetchInfo[] | null) => {
+						splitRequests(data, requestedUrls).
+							then((response: {success: TFetchInfo[], error: TFetchInfo[]} | null) => {
 							resolve(response); // should be array of all responses to batch requests
 						}).catch((response: any) => {
 							reject(response);
@@ -341,39 +375,53 @@ function singleBatchRequest(
 function splitRequests(
 	responseSet: string,
 	requestedUrls: string[]
-): Promise<TFetchInfo[] | null> {
+): Promise<{success: TFetchInfo[], error: TFetchInfo[] } | null> {
 	return new Promise((resolve, reject) => {
 		let idx: number,
+			httpCode: number,
 			urlIndex: number = 0,
 			checkResponse: Promise<any>[] = [],
 			match: RegExpMatchArray | null,
 			fetchInfo: TFetchInfo[] = [],
+			errorResponses: TFetchInfo[] = [],
 			allResponses: RegExpMatchArray | null = responseSet.match(/HTTP\/1.1[^\{]+(\{.*\})/g);
 
 		if (allResponses == null)
 			return resolve(null);
 		for (let response of allResponses!) {
-			idx = fetchInfo.push({
-				RequestedUrl: requestedUrls[urlIndex++],
-				HttpStatus: parseInt(response.match(/HTTP\/\d\.\d (\d{3})/)![1]),
-				ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
-				Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
-				Data: JSON.parse(response.match(/\{.*\}/)![0]),
-				ProcessedData: []
-			}) - 1;
-			checkResponse.push(new Promise((resolve, reject) => {
-				collectNext(fetchInfo[idx].Data, []).then((fetched) => {
-					resolve(fetched);
-				}).catch((response) => {
-					reject(response);
+			if ((httpCode = parseInt(response.match(/HTTP\/\d\.\d (\d{3})/)![1])) < 400) {
+				idx = fetchInfo.push({
+					RequestedUrl: requestedUrls[urlIndex++],
+					HttpStatus: httpCode,
+					ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
+					Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
+					Data: JSON.parse(response.match(/\{.*\}/)![0]),
+					ProcessedData: []
+				}) - 1;
+				checkResponse.push(new Promise((resolve, reject) => {
+					collectNext(fetchInfo[idx].Data, []).then((fetched) => {
+						resolve(fetched);
+					}).catch((response) => {
+						reject(response);
+					});
+				}));
+			} else 
+				errorResponses.push({
+					RequestedUrl: requestedUrls[urlIndex++],
+					HttpStatus: httpCode,
+					ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
+					Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
+					Data: JSON.parse(response.match(/\{.*\}/)![0]),
+					ProcessedData: []
 				});
-			}));
 		}
-
 		Promise.all(checkResponse).then((fetches) => {
 			for (idx = 0; idx < fetches.length; idx++)
 				fetchInfo[idx].ProcessedData = fetches[idx];
-			resolve(fetchInfo);		
+			resolve({
+					success: fetchInfo, 
+					error: errorResponses
+			});
 		}).catch((response) => {
 			reject(response);
 		});
@@ -1475,242 +1523,6 @@ function RequestAgain(
 		});
 	});
 }
-
-const 
-   SPListTemplateTypes = {
-      enums: [
-         { name: "InvalidType",     typeId: -1 },
-         { name: "NoListTemplate",  typeId: 0 },
-         { name: "GenericList",     typeId: 100 },
-         { name: "DocumentLibrary", typeId: 101 },
-         { name: "Survey",          typeId: 102 },
-         { name: "Links",           typeId: 103 },
-         { name: "Announcements",   typeId: 104 },
-         { name: "Contacts",        typeId: 105 },
-         { name: "Events",          typeId: 106 },
-         { name: "Tasks",           typeId: 107 },
-         { name: "DiscussionBoard", typeId: 108 },
-         { name: "PictureLibrary",  typeId: 109 },
-         { name: "DataSources",     typeId: 110 },
-         { name: "WebTemplateCatalog", typeId: 111 },
-         { name: "UserInformation", typeId: 112 },
-         { name: "WebPartCatalog",  typeId: 113 },
-         { name: "ListTemplateCatalog", typeId: 114 },
-         { name: "XMLForm",         typeId: 115 },
-         { name: "MasterPageCatalog", typeId: 116 },
-         { name: "NoCodeWorkflows", typeId: 117 },
-         { name: "WorkflowProcess", typeId: 118 },
-         { name: "WebPageLibrary",  typeId: 119 },
-         { name: "CustomGrid",      typeId: 120 },
-         { name: "SolutionCatalog", typeId: 121 },
-         { name: "NoCodePublic", typeId: 122 },
-         { name: "ThemeCatalog", typeId: 123 }
-      ],
-      getFieldTypeNameFromTypeId: (typeId: number) => {
-         return (SPListTemplateTypes.enums.find(elem => elem.typeId == typeId))!.name;
-      },
-      getFieldTypeIdFromTypeName: (typeName: string) => {
-         return (SPListTemplateTypes.enums.find(elem => elem.name == typeName))!.typeId;
-      }
-   },
-   SPFieldTypes = {
-		enums: [
-			{ name: "Invalid",      metadataType: null,                typeId: 0 },
-			{ name: "Integer",      metadataType: "SP.FieldNumber",     typeId: 1,
-					extraProperties: [
-						"CommaSeparator",   		// boolean
-						"CustomUnitName",       // string or null
-						"CustomUnitOnRight",    // boolean
-						"DisplayFormat",  		// integer # of decimal digits to display
-						"MaximumValue",         // double type float: max value of num
-						"MinimumValue",			// double type float: min value of num
-						"ShowAsPercentage",		// boolean - render value as percentage
-						"Unit"						// string 
-					] 
-			},
-			{ name: "Text",         metadataType: "SP.FieldText",           typeId: 2,
-					extraProperties: [
-						"MaxLength"   // integer: gets maximum number of characters allowed for field
-					] 
-			},
-			{ name: "Note",         metadataType: "SP.FieldMultiLineText",  typeId: 3,
-					extraProperties: [
-						"AllowHyperlink",   // boolean: get/set whether hyperlink allowed in field value
-						"AppendOnly",       // boolean: get/set whether changes to value are displayed in list forms
-						"IsLongHyperlink",  // boolean: 
-						"NumberOfLines",    // integer: get/set # lines to display for field
-						"RestrictionMode",  // boolean: get/set whether to support subset of rich formatting
-						"RichText",         // boolean: get/set whether to support rich formatting
-						"UnlimitedLengthInDocumentLibrary",   // boolean: get/set
-						"WikiLinking",      // boolean:  get value whether implementation-specific mechanism for linking wiki pages
-					] 
-			},
-			{ name: "DateTime",     metadataType: "SP.FieldDateTime",  typeId: 4,  
-					extraProperties: [
-						"DateTimeCalendarType",   // 
-						"DateFormat",             //
-						"DisplayFormat",          //
-						"FriendlyDisplayFormat",  // 
-						"TimeFormat"
-					] 
-			},
-			{ name: "Counter",      metadataType: "SP.Field",        typeId: 5 },
-			{ name: "Choice",       metadataType: "SP.FieldChoice",  typeId: 6,
-					extraProperties: [
-						"FillInChoice",     // boolean: gets/sets whether fill-in value allowed
-						"Mappings",  // string: 
-						"Choices"       //  objects with "results" property that is array of strings with choices
-					]
-			},
-			{ name: "Lookup",       metadataType: "SP.FieldLookup",   typeId: 7,
-					extraProperties: [
-						"AllowMultipleValues",   		// boolean: whether lookup field allows multiple values
-						"DependentLookupInternalNames",  // string or null
-						"IsDependentLookup",    // boolean: gets indication if field is 2ndary lookup field that depends on primary field
-								// for its relationship with lookup list
-						"IsRelationship",  		//boolean: gets/set whether lookup field returned by GetRelatedField from list being looked up
-						"LookupField",         // string: gets/set value of internal field name of field used as lookup value
-						"LookupList",			// string: gets/sets value of list identifier of list containing field to lookup values
-						"LookupWebId",		// SP.Guid: gets/sets value of GUID identifying site containing list which has field for lookup values
-						"PrimaryFieldId",		// string: gets/sets value specifying primary look field identifier if there is a dependent
-									// lookup field; otherwise empty string
-						"RelationshipDeleteBehavior",		// SP.RelationshipDeleteBehaviorType: gets/sets value that specifies delete behavior of lookup field 
-						"UnlimitedLengthInDocumentLibrary",	 // boolean: 
-					] 			
-			},
-			{ name: "Boolean",      metadataType: "SP.Field",        typeId: 8 },
-			{ name: "Number",       metadataType: "SP.FieldNumber",  typeId: 9,
-				extraProperties: [
-					"CommaSeparator",   		// boolean
-					"CustomUnitName",       // string or null
-					"CustomUnitOnRight",    // boolean
-					"DisplayFormat",  		// integer # of decimal digits to display
-					"MaximumValue",         // double type float: max value of num
-					"MinimumValue",			// double type float: min value of num
-					"ShowAsPercentage",		// boolean - render value as percentage
-					"Unit"						// string 
-				] 
-			},
-			{ name: "Currency",     typeId: 10 },
-			{ name: "URL",          metadataType: "SP.FieldUrl",       typeId: 11,
-					extraProperties: [
-						"DisplayFormat"   // integer: unknown about value sets
-					] 
-			},
-			{ name: "Computed",     metadataType: "SP.FieldComputed",    typeId: 12,
-					extraProperties: [
-						"EnableLookup"  // boolean: gets/sets value specifying whether lookup field can reference the field
-					]
-			},
-			{ name: "Threading",    typeId: 13 },
-			{ name: "Guid",         metadataType: "SP.FieldGuid",        typeId: 14 }, // so far, just a standard basic field as string
-			{ name: "MultiChoice",  metadataType: "SP.FieldMultiChoice", typeId: 15,
-					extraProperties: [
-						"FillInChoice",     // boolean: gets/sets whether fill-in value allowed
-						"Mappings",  // string: 
-						"Choices"       //  objects with "results" property that is array of strings with choices
-					]
-			},
-			{ name: "GridChoice",   typeId: 16 },
-			{ name: "Calculated",   typeId: 17 },
-			{ name: "File",         metadataType: "SP.Field",          typeId: 18 },
-			{ name: "Attachments",  typeId: 19 },
-			{ name: "User",         metadataType: "SP.FieldUser",       typeId: 20,
-					extraProperties: [
-						// these properties are from Lookup type 7
-						"AllowMultipleValues",   		// boolean: whether lookup field allows multiple values
-						"DependentLookupInternalNames",  // string or null
-						"IsDependentLookup",    // boolean: gets indication if field is 2ndary lookup field that depends on primary field
-								// for its relationship with lookup list
-						"IsRelationship",  		//boolean: gets/set whether lookup field returned by GetRelatedField from list being looked up
-						"LookupField",         // string: gets/set value of internal field name of field used as lookup value
-						"LookupList",			// string: gets/sets value of list identifier of list containing field to lookup values
-						"LookupWebId",		// SP.Guid: gets/sets value of GUID identifying site containing list which has field for lookup values
-						"PrimaryFieldId",		// string: gets/sets value specifying primary look field identifier if there is a dependent
-									// lookup field; otherwise empty string
-						"RelationshipDeleteBehavior",		// SP.RelationshipDeleteBehaviorType: gets/sets value that specifies delete behavior of lookup field 
-						"UnlimitedLengthInDocumentLibrary",	 // boolean: 
-						// these are special to User
-						"AllowDisplay",  		//boolean: gets/set whether to display name of user in survey list
-						"Presence",         // boolean: gets/sets whether presence (online status) is enabled on the field
-						"SelectionGroup",			// number: gets/sets value of identifiter of SP group whose members can be selected as values of field
-						"SelectionMode",		// SP.FieldUserSelectionMode: gets/sets value specifying whether users and groups or only users can be selected
-								// SP.FieldUserSelectionMode.peopleAndGroups = 1, SP.FieldUserSelectionMode.peopleOnly = 0
-						"UserDisplayOptions"		// 
-					] 	
-			},
-			{ name: "Recurrence",   typeId: 21 },
-			{ name: "CrossProjectLink", typeId: 22 },
-			{ name: "ModStat",      typeId: 23, // Moderation Status is a Choices type
-				extraProperties: [
-					"FillInChoice",     // boolean: gets/sets whether fill-in value allowed
-					"Mappings",  // string: 
-					"Choices",       //  objects with "results" property that is array of strings with choices
-							// usually "results": ["0;#Approved", "1;#Rejected", "2;#Pending", "3;#Draft", "4;#Scheduled"]
-					"EditFormat"       // integer value for format type in editing
-				] 
-			},
-			{ name: "Error",        typeId: 24 },
-			{ name: "ContentTypeId", metadataType: "SP.Field",   typeId: 25 },
-			{ name: "PageSeparator", typeId: 26 },
-			{ name: "ThreadIndex",  typeId: 27 },
-			{ name: "WorkflowStatus", typeId: 28 },
-			{ name: "AllDayEvent",  typeId: 29 },
-			{ name: "WorkflowEventType", typeId: 30 },
-			{ name: "Geolocation"   },
-			{ name: "OutcomeChoice" },
-			{ name: "MaxItems",     typeId: 31 }
-		],
-		standardProperties: [
-			"AutoIndexed",
-			"CanBeDeleted",  // true = field can be deleted
-						// returns false if FromBaseType == true || Sealed == True
-			"ClientSideComponentId", // 
-			"ClientSideComponentProperties",
-			"ClientValidationFormula",
-			"ClientValidationMessage",
-			"CustomFormatter",
-			"DefaultFormula", // string: gets/sets default formula for calculated field
-			"DefaultValue", // string: gets/sets default value for field
-			"Description",
-			"Direction",  // string: "none","LTR","RTL" gets/sets reading order of field
-			"EnforceUniqueValues", // boolean: gets/sets to force uniqueness of column values (false=default)
-			"EntityPropertyName", // string: gets name of entity proper for list item entity using field
-			"Filterable", // boolean: gets whether field can be filtered
-			"FromBaseType", // boolean: gets whetehr field derives from base field type
-			"Group", // string: gets/sets column group to which field belongs
-				// Groups: Base, Core Contact and Calendar, Core Document, Core Task and Issue, Custom, Extended, _Hidden, Picture
-			"Hidden", // boolean: specifies field display in list 
-			"Id", // guid of field
-			"Indexed", // boolean: gets/sets if field is indexed
-			"IndexStatus",
-			"InternalName", // string: gets internal name of field
-			"IsModern",
-			"JSLink",  // string: gets/sets name of JS file(s) [separated by '|'] for client rendering logic of field
-			"PinnedToFiltersPane",
-			"ReadOnlyField", // boolean: gets/sets whether field can be modifed
-			"Required", // boolean: gets/sets whether user must enter value on New and Edit forms
-			"SchemaXml", // string: gets/sets schema that defines the field
-			"Scope", // string: gets Web site-relative path to list in which field collection is used
-			"Sealed", // boolean: gets/sets whether field type can be parent of custom derived field type
-			"ShowInFiltersPane",
-			"Sortable", // boolean: gets boolean whether field can be used in sort
-			"StaticName", // string: gets/sets static name 
-			"Title", // string: gets/sets display name for field
-			"FieldTypeKind", // 
-			"TypeAsString", // string: gets the type of field as a string value
-			"TypeDisplayName", // string: gets display name of the field type
-			"TypeShortDescription", // string: gets the description of the field
-			"ValidationFormula", // string: gets/sets formula referenced by field, evaluated when list item added/updated
-			"ValidationMessage" // string: gets/sets message to display if validation fails
-		],
-		getFieldTypeNameFromTypeId: (typeId: number) => {
-			return (SPFieldTypes.enums.find(elem => elem.typeId == typeId))!.name;
-		},
-		getFieldTypeIdFromTypeName: (typeName: string) => {
-			return (SPFieldTypes.enums.find(elem => elem.name == typeName))!.typeId;
-		}
-	};
 
 /**
  * @function getTaxonomyValue -- returns values from single-valued Managed Metadata fields
