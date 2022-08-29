@@ -30,9 +30,6 @@ How to get info on all users through siteuserinfolist:
 
 */
 
-import * as SPRESTTypes from './SPRESTtypes';
-import * as SPRESTGlobals from './SPRESTGlobals';
-
 type TUserSearch = {
 	userId?: number;
 	id?: number;
@@ -50,7 +47,7 @@ type TUserSearch = {
  *                                      {.lastName: "<last-name>", .firstName: "<first-name>" }
  *          {.debugging: true...sets for debugger}
  */
- export class UserInfo {
+class UserInfo {
 	search: TUserSearch;
 	userId: number = -1; // numeric SP ID
 	loginName: string = ""; //i:0#.w|domain\\user name
@@ -83,25 +80,25 @@ type TUserSearch = {
 				} = {};
 
 			if (this.search.userId) {
-				type = SPRESTGlobals.requestType.TYPE_ID;
+				type = requestType.TYPE_ID;
 				args = {
 					userId: this.search.userId
 				};
 			} else if (this.search.lastName)
 			   if (this.search.firstName) {
-					type = SPRESTGlobals.requestType.TYPE_FULL_NAME;
+					type = requestType.TYPE_FULL_NAME;
 					args = {
 						lastName: this.search.lastName,
 						firstName: this.search.firstName
 					};
 				} else {
-					type = SPRESTGlobals.requestType.TYPE_LAST_NAME;
+					type = requestType.TYPE_LAST_NAME;
 					args = {
 						lastName: this.search.lastName
 					};
 				}
 			else  {
-				type = SPRESTGlobals.requestType.TYPE_CURRENT_USER;
+				type = requestType.TYPE_CURRENT_USER;
 			}
 			userRestReqObj.requestUserInfo({
 					uiObject: this,
@@ -157,7 +154,7 @@ type TUserSearch = {
  *        .site {string} [optional]  site within server site collection, empty string is default
  *        .debugging {boolean}  if true, set to debugging
  */
-export class SPUserREST {
+class SPUserREST {
 	server: string;
 	site: string;
 	constructor(parameters: {
@@ -194,7 +191,7 @@ export class SPUserREST {
 		if (parameters.uiObject instanceof UserInfo == false)
 			throw "SPUserREST.requestUserInfo(): missing 'uiObject' parameter or parameter not UserInfo class";
 		return new Promise((resolve, reject) => {
-			if (parameters.type == SPRESTGlobals.requestType.TYPE_CURRENT_USER)
+			if (parameters.type == requestType.TYPE_CURRENT_USER)
 				this.processRequest({
 					url: this.server + this.site + "/_api/web/currentuser"
 				}).then((response) => {
@@ -211,7 +208,7 @@ export class SPUserREST {
 				}).catch((response) => {
 					reject(response);
 				});
-			else if (parameters.type == SPRESTGlobals.requestType.TYPE_ID)
+			else if (parameters.type == requestType.TYPE_ID)
 				this.processRequest({
 					url: this.server + this.site + "/_api/web/siteuserinfolist/items(" + parameters.args!.userId + ")"
 				}).then((response) => {
@@ -224,7 +221,7 @@ export class SPUserREST {
 				});
 			else { // type == TYPE_FULL_NAME or TYPE_LAST_NAME
 				let filter: string = "$filter=lastName eq '" + parameters.args!.lastName + "'";
-				if (parameters.type == SPRESTGlobals.requestType.TYPE_FULL_NAME)
+				if (parameters.type == requestType.TYPE_FULL_NAME)
 					filter += " and firstName eq '" + parameters.args!.firstName + "'";
 				this.processRequest({
 					url: this.server + this.site + "/_api/web/siteuserinfolist/items?" + filter
@@ -263,7 +260,7 @@ export class SPUserREST {
 	};
 }
 
-export function getSharePointCurrentUserInfo(parameters: {
+function getSharePointCurrentUserInfo(parameters: {
 	server: string;
 	site: string;
 }): Promise<any> {
@@ -281,7 +278,7 @@ export function getSharePointCurrentUserInfo(parameters: {
 	});
 }
 
-export function getSharePointUserInfo(parameters: {
+function getSharePointUserInfo(parameters: {
 	server: string;
 	site: string;
 	userId: number;
@@ -311,7 +308,7 @@ export function getSharePointUserInfo(parameters: {
 }
 
 let CollectedResults: any[];
-export function getAllSharePointUsersInfo(parameters: {
+function getAllSharePointUsersInfo(parameters: {
 	url?: string;
 	server?: string;
 	site?: string;
@@ -327,7 +324,7 @@ export function getAllSharePointUsersInfo(parameters: {
 				"Content-Type": "application/json;odata=verbose",
 				"Accept": "application/json;odata=verbose"
 			},
-			success: (data: SPRESTTypes.TSPResponseData) => {
+			success: (data: TSPResponseData) => {
 				if (!CollectedResults)
 					CollectedResults = data.d!.results as any[];
 				else

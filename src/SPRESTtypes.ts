@@ -1,5 +1,5 @@
 
-export interface ISPBaseListFieldProperties {
+interface ISPBaseListFieldProperties {
 	__metadata: { type: string; }
 	Id: number;
 	InternalName: string;
@@ -19,7 +19,7 @@ export interface ISPBaseListFieldProperties {
 	}
 }
 
-export interface ISPBaseListItemProperties {
+interface ISPBaseListItemProperties {
 	__metadata: { type: string; }
 	Id: number;
 	InternalName: string;
@@ -29,10 +29,10 @@ export interface ISPBaseListItemProperties {
 
 
 // defined by JQuery AJAX
-export type TJQueryPlainObject = {[key:string]: [] | typeof document | string };
-export type TXmlHttpRequestData =  [] | string | TJQueryPlainObject;
+type TJQueryPlainObject = {[key:string]: [] | typeof document | string };
+type TXmlHttpRequestData =  [] | string | TJQueryPlainObject;
 
-export type TSPResponseDataProperties = {
+type TSPResponseDataProperties = {
 	Id: string;
 	Title: string;
 	InternalName?: string;
@@ -40,7 +40,7 @@ export type TSPResponseDataProperties = {
 	WebTemplate?: string;
 };
 
-export type TSPResponseData = {
+type TSPResponseData = {
 	d?: {
 		results?: TSPResponseDataProperties[],
 		GetContextWebInformation?: {
@@ -54,15 +54,15 @@ export type TSPResponseData = {
 	__next?: string;
 };
 
-export type TSuccessCallback = (data: TSPResponseData, status?: string, reqObj?: JQueryXHR) => void;
-export type TErrorCallback = (reqObj: JQueryXHR, status?: string, err?: string) => void;
+type TSuccessCallback = (data: TSPResponseData, status?: string, reqObj?: JQueryXHR) => void;
+type TErrorCallback = (reqObj: JQueryXHR, status?: string, err?: string) => void;
 
-export type THttpRequestProtocol = "https" | "http" | "https://" | "http://";
+type THttpRequestProtocol = "https" | "http" | "https://" | "http://";
 
-export type THttpRequestMethods = "GET" | "POST" | "PUT" | "PATCH" | "HEAD" | "OPTIONS" |
+type THttpRequestMethods = "GET" | "POST" | "PUT" | "PATCH" | "HEAD" | "OPTIONS" |
 		"DELETE" | "TRACE" | "CONNECT";
 
-export type THttpRequestHeaders = {
+type THttpRequestHeaders = {
 	"Accept"?: "application/json;odata=verbose" | "application/json;odata=nometadata";
 	"Content-Type"?: "application/json;odata=verbose" | "text/plain" | "text/html" | "text/xml";
 	"IF-MATCH"?: "*"; // can also use etag
@@ -71,7 +71,15 @@ export type THttpRequestHeaders = {
 	[key: string]: any;
 };
 
-export type THttpRequestParams = ({
+// this type used to monitor HTTP request calls in an intermediate fashion
+type TIntervalControl = {
+	currentCount?: number;   // keeps track of current counts of results returned in (AJAX) request
+	nextCount?: number;      // keeps track of next count
+	interval: number;       // the number of results returned for each interval
+	callback: (count: number) => void;  // function to call when a certain count of results are returned in request
+} | null;
+
+type THttpRequestParams = ({
 	url: string;
 	setDigest?: boolean;
 	method?: THttpRequestMethods;
@@ -80,9 +88,11 @@ export type THttpRequestParams = ({
 	body?:  TXmlHttpRequestData;
 	successCallback: TSuccessCallback;
 	errorCallback: TErrorCallback;
+	ignore?: number[]; // errors to ignore/catch
+	progressReport?: TIntervalControl
 });
 
-export type THttpRequestParamsWithPromise = ({
+type THttpRequestParamsWithPromise = ({
 	url: string;
 	setDigest?: boolean;
 	method?: THttpRequestMethods;
@@ -91,15 +101,17 @@ export type THttpRequestParamsWithPromise = ({
 	body?: TXmlHttpRequestData;
 	successCallback?: TSuccessCallback;
 	errorCallback?: TErrorCallback;
+	ignore?: number[]; // errors to ignore/catch
+	progressReport?: TIntervalControl
 });
 
-export type THttpRequestBody<T = any> = {
+type THttpRequestBody<T = any> = {
 		[key: string]: T;
 	}
 
-export type TQueryProperties = "Expand" | "Filter" | "Select" | "expand" | "filter" | "select";
+type TQueryProperties = "Expand" | "Filter" | "Select" | "expand" | "filter" | "select";
 
-export interface IBatchHTTPRequestParams {
+interface IBatchHTTPRequestParams {
 	host: string;
 	path: string;
 	protocol?: THttpRequestProtocol;
@@ -107,14 +119,14 @@ export interface IBatchHTTPRequestParams {
 	AllMethods?: THttpRequestMethods;
 }
 
-export interface IBatchHTTPRequestForm {
+interface IBatchHTTPRequestForm {
 	url: string;
 	method?: THttpRequestMethods;
 	body?: THttpRequestBody;
 	headers?: THttpRequestHeaders;
 }
 
-export type TParsedURL = {
+type TParsedURL = {
 	originalUrl: string;
 	protocol: THttpRequestProtocol;
 	server: string;
@@ -128,42 +140,43 @@ export type TParsedURL = {
 	query: any[];
 };
 
-export interface IListSetupMinimal {
+interface IListSetupMinimal {
 	server: string;
 	site: string;
 	include?: string;
 	protocol?: string;
 }
 
-export interface IListSetupWithName extends IListSetupMinimal {
+interface IListSetupWithName extends IListSetupMinimal {
 	listName: string;
 	listGuid?: never;
 }
 
-export interface IListSetupWithGuid extends IListSetupMinimal {
+interface IListSetupWithGuid extends IListSetupMinimal {
 	listGuid: string;
 	listName?: never;
 }
 
-export type TListSetup = IListSetupWithName | IListSetupWithGuid;
+type TListSetup = IListSetupWithName | IListSetupWithGuid;
 
-export type TLookupFieldInfo = {
+type TLookupFieldInfo = {
 	fieldDisplayName: string,
 	fieldInternalName: string;
+	fieldLookupFieldName: string;
 	choices: {
 		id: number;
 		value: string;
 	}[] | null;
 };
 
-export type TSpSiteInfo = {
+type TSpSiteInfo = {
 	name:string;
 	serverRelativeUrl:string;
 	id:string;
 	template:string
 };
 
-export type TSiteInfo = {
+type TSiteInfo = {
 	name?: string | null;
 	server?: string;
 	serverRelativeUrl?: string;
@@ -174,7 +187,7 @@ export type TSiteInfo = {
 	referenceSite?: TSiteInfo;
 } ;
 
-export type TSPDocLibCheckInType =  "minor" | "Minor" | "major" | "Major" | "overwrite" | "Overwrite";
+type TSPDocLibCheckInType =  "minor" | "Minor" | "major" | "Major" | "overwrite" | "Overwrite";
 
 
 

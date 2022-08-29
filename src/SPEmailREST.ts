@@ -31,8 +31,7 @@ interface IEmailHeaders {
 	BCC?: string | null;
 	From?: string | null;
 }
-
-export class SPUtilityEmailService {
+class SPUtilityEmailService {
     server: string;
     site: string;
 
@@ -156,7 +155,7 @@ export class SPUtilityEmailService {
 //   .To : To addressee; optional if the global constant
 //           DEVELOPER_MAIL_ADDRESS is defined with proper email address
 
-export function emailDeveloper(parameters : {
+function emailDeveloper(parameters : {
     server: string;
     site: string;
     errorObj?: object;

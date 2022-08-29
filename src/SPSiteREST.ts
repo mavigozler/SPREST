@@ -2,14 +2,10 @@
 
 /* jshint -W119, -W069 */
 
-import * as SPRESTTypes from './SPRESTtypes';
-import { SPListREST } from './SPListREST';
-import * as SPRESTSupportLib from './SPRESTSupportLib';
-
 /**
  * @class SPSiteREST
  */
-export class SPSiteREST {
+class SPSiteREST {
 	server: string;
 	sitePath: string;
 	apiPrefix: string;
@@ -23,11 +19,11 @@ export class SPSiteREST {
 	homePage: string = "";
 	siteLogoUrl: string = "";
 	template: string = "";
-	static stdHeaders: SPRESTTypes.THttpRequestHeaders = {
+	static stdHeaders: THttpRequestHeaders = {
 		"Accept": "application/json;odata=verbose",
 		"Content-Type": "application/json;odata=verbose"
 	};
-	arrayPedigree: SPRESTTypes.TSiteInfo[] = [];
+	arrayPedigree: TSiteInfo[] = [];
 
 	/**
 	 * @constructor SPSiteREST -- sets up properties and methods instance to describe a SharePoint site
@@ -104,7 +100,7 @@ export class SPSiteREST {
 	} // _init()
 
 	// if parameters.success not found the request will be SYNCHRONOUS and not ASYNC
-	static httpRequest(elements: SPRESTTypes.THttpRequestParams) {
+	static httpRequest(elements: THttpRequestParams) {
 		if (elements.setDigest && elements.setDigest == true) {
 			let match = elements.url.match(/(.*\/_api)/);
 
@@ -115,7 +111,7 @@ export class SPSiteREST {
 				method: "POST",
 				headers: {...SPSiteREST.stdHeaders},
 				success: function (data) {
-						 let headers: SPRESTTypes.THttpRequestHeaders | undefined = elements.headers;
+						 let headers: THttpRequestHeaders | undefined = elements.headers;
 
 						 if (headers) {
 							  headers["Content-Type"] = "application/json;odata=verbose";
@@ -129,7 +125,7 @@ export class SPSiteREST {
 						method: elements.method,
 						headers: headers,
 						data: elements.body ?? elements.data as string,
-						success: function (data: SPRESTTypes.TSPResponseData, status: string, requestObj: JQueryXHR) {
+						success: function (data: TSPResponseData, status: string, requestObj: JQueryXHR) {
 							elements.successCallback!(data, status, requestObj);
 						},
 						error: function (requestObj: JQueryXHR, status: string, thrownErr: string) {
@@ -153,9 +149,9 @@ export class SPSiteREST {
 				method: elements.method ? elements.method : "GET",
 				headers: elements.headers,
 				data: elements.body ?? elements.data as string,
-				success: function (data: SPRESTTypes.TSPResponseData, status: string, requestObj: JQueryXHR) {
+				success: function (data: TSPResponseData, status: string, requestObj: JQueryXHR) {
 					if (data.d && data.__next)
-						SPRESTSupportLib.RequestAgain(
+						RequestAgain(
 							elements,
 							data.__next,
 							data.results!
@@ -174,15 +170,15 @@ export class SPSiteREST {
 		}
 	}
 
-	static  httpRequestPromise(parameters: SPRESTTypes.THttpRequestParamsWithPromise) {
+	static  httpRequestPromise(parameters: THttpRequestParamsWithPromise) {
 		return new Promise((resolve, reject) => {
 			SPSiteREST.httpRequest({
 				setDigest: parameters.setDigest,
 				url: parameters.url,
 				method: parameters.method ? parameters.method : "GET",
 				headers: parameters.headers,
-				data: parameters.data ?? parameters.body as SPRESTTypes.TXmlHttpRequestData,
-				successCallback: (data: SPRESTTypes.TSPResponseData, message: string | undefined, reqObj: JQueryXHR | undefined) => {
+				data: parameters.data ?? parameters.body as TXmlHttpRequestData,
+				successCallback: (data: TSPResponseData, message: string | undefined, reqObj: JQueryXHR | undefined) => {
 					resolve({data: data, message: message, reqObj: reqObj});
 				},
 				errorCallback: (reqObj: JQueryXHR, status: string | undefined, err: string | undefined) => {
@@ -198,7 +194,7 @@ export class SPSiteREST {
 	 */
 	getProperties(parameters?: any) {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/site" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.apiPrefix + "/site" + constructQueryParameters(parameters)
 		});
 	}
 
@@ -208,7 +204,7 @@ export class SPSiteREST {
 
 	getWebProperties(parameters?: any) {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.apiPrefix + "/web" + constructQueryParameters(parameters)
 		});
 	}
 
@@ -223,8 +219,8 @@ export class SPSiteREST {
 			SPSiteREST.httpRequest({
 				url: this.apiPrefix + "/web/webinfos",
 				method: "GET",
-				successCallback: (data: SPRESTTypes.TSPResponseData) => {
-					let sites: SPRESTTypes.TSiteInfo[] = [ ],
+				successCallback: (data: TSPResponseData) => {
+					let sites: TSiteInfo[] = [ ],
 						results = data.d!.results;
 
 					for (let result of results!)
@@ -259,15 +255,15 @@ export class SPSiteREST {
 		});
 	}
 
-	getSitePedigree(siteUrl: string | null): Promise<{pedigree: SPRESTTypes.TSiteInfo; arrayPedigree: SPRESTTypes.TSiteInfo[]}> {
+	getSitePedigree(siteUrl: string | null): Promise<{pedigree: TSiteInfo; arrayPedigree: TSiteInfo[]}> {
 		return new Promise((resolve, reject) => {
-			let pedigree: SPRESTTypes.TSiteInfo = {},
+			let pedigree: TSiteInfo = {},
 
-					siteInfo: SPRESTTypes.TSiteInfo = {},
-					repeatGetParent = (siteInfo: SPRESTTypes.TSiteInfo) => {
+					siteInfo: TSiteInfo = {},
+					repeatGetParent = (siteInfo: TSiteInfo) => {
 						this.getParentWeb(siteInfo.server! + siteInfo.serverRelativeUrl).then((ParentWeb) => {
 							if (ParentWeb) {  // != null
-								let siteParent: SPRESTTypes.TSiteInfo = {};
+								let siteParent: TSiteInfo = {};
 								ParentWeb = ParentWeb.data.d;
 								siteParent.name = ParentWeb.Title;
 								siteParent.server = siteInfo.server;
@@ -294,7 +290,7 @@ export class SPSiteREST {
 				siteInfo.server = this.server;
 				siteInfo.serverRelativeUrl = this.serverRelativeUrl;
 			} else {
-				let parsedUrl: SPRESTTypes.TParsedURL | null = SPRESTSupportLib.ParseSPUrl(siteUrl);
+				let parsedUrl: TParsedURL | null = ParseSPUrl(siteUrl);
 
 				if (parsedUrl == null)
 					throw "Parameter 'siteUrl' was not a parseable SharePoint URL";
@@ -318,7 +314,7 @@ export class SPSiteREST {
 		});
 	}
 
-	fillOutPedigree (parentWeb: SPRESTTypes.TSiteInfo): Promise<any> {
+	fillOutPedigree (parentWeb: TSiteInfo): Promise<any> {
 		return new Promise((resolve, reject) => {
 			let subSite: SPSiteREST;
 
@@ -370,19 +366,19 @@ export class SPSiteREST {
 
 	getSiteColumns(parameters: any): Promise<any> {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/fields" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.apiPrefix + "/web/fields" + constructQueryParameters(parameters)
 		});
 	}
 
 	getSiteContentTypes(parameters: any): Promise<any> {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/ContentTypes" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.apiPrefix + "/web/ContentTypes" + constructQueryParameters(parameters)
 		});
 	}
 
 	getLists(parameters?: any):Promise<any> {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.apiPrefix + "/web/lists" + constructQueryParameters(parameters)
 		});
 	}
 
@@ -391,12 +387,12 @@ export class SPSiteREST {
 	 * @param {*} parameters -- need to control these!
 	 * @returns
 	 */
-	createList(parameters: {body: SPRESTTypes.THttpRequestBody}) {
-		let body: SPRESTTypes.THttpRequestBody | string = parameters.body;
+	createList(parameters: {body: THttpRequestBody}) {
+		let body: THttpRequestBody | string = parameters.body;
 
-		if (SPRESTSupportLib.checkEntityTypeProperty(body, "item") == false)
+		if (checkEntityTypeProperty(body, "item") == false)
 			body["__SetType__"] = "SP.List";
-		body = SPRESTSupportLib.formatRESTBody(body);
+		body = formatRESTBody(body);
 		return SPSiteREST.httpRequestPromise({
 			setDigest: true,
 			url: this.apiPrefix + "/web/lists",
@@ -410,12 +406,12 @@ export class SPSiteREST {
 	 * @param {object} parameters -- need a 'Title' parameter
 	 * @returns
 	 */
-	updateListByMerge(parameters: {body: SPRESTTypes.THttpRequestBody, listGuid: string}) {
-		let body: SPRESTTypes.THttpRequestBody | string = parameters.body;
+	updateListByMerge(parameters: {body: THttpRequestBody, listGuid: string}) {
+		let body: THttpRequestBody | string = parameters.body;
 
-		if (SPRESTSupportLib.checkEntityTypeProperty(body, "item") == false)
+		if (checkEntityTypeProperty(body, "item") == false)
 			body["__SetType__"] = "SP.List";
-		body = SPRESTSupportLib.formatRESTBody(body);
+		body = formatRESTBody(body);
 		return SPSiteREST.httpRequestPromise({
 			setDigest: true,
 			url: this.apiPrefix + "/web/lists" +
@@ -606,7 +602,7 @@ export class SPSiteREST {
 			}).then((response: any) => {
 				let folders: any[] = [],
 						results: any[] = response.data ? response.data : response,
-						requests: SPRESTTypes.IBatchHTTPRequestForm[] = [],
+						requests: IBatchHTTPRequestForm[] = [],
 						returnvalue: string = "";
 
 				for (let item of results)
@@ -638,7 +634,7 @@ export class SPSiteREST {
 							"ServerRelativeUrl": item.serverRelativeUrl
 						 }
 					});
-					SPRESTSupportLib.batchRequestingQueue(
+					batchRequestingQueue(
 					{host: destLib.server, path: destLib.site,
 						AllHeaders: SPSiteREST.stdHeaders, AllMethods: "POST"},
 					requests

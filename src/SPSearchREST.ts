@@ -1,18 +1,14 @@
 "use strict";
 
-import * as SPRESTTypes from './SPRESTtypes';
-import * as SPRESTSupportLib from './SPRESTSupportLib';
-
-
 /**
  *
  * @class  representing parameters to establish interface with a site
  *             {server: name of location.host, site: path to site}
  */
-export class SPSearchREST {
+class SPSearchREST {
 	server: string;
 	apiPrefix: string;
-	static stdHeaders: SPRESTTypes.THttpRequestHeaders = {
+	static stdHeaders: THttpRequestHeaders = {
 		"Accept": "application/json;odata=verbose",
 		"Content-Type": "application/json;odata=verbose"
 	};
@@ -24,7 +20,7 @@ export class SPSearchREST {
    	this.apiPrefix = this.server + "/_api";
 	}
 	// if parameters.success not found the request will be SYNCHRONOUS and not ASYNC
-	static httpRequest(elements:SPRESTTypes.THttpRequestParams) {
+	static httpRequest(elements:THttpRequestParams) {
 		if (elements.setDigest && elements.setDigest == true) {
 			let match = elements.url.match(/(.*\/_api)/);
 			$.ajax({  // get digest token
@@ -32,7 +28,7 @@ export class SPSearchREST {
 				method: "POST",
 				headers: {...SPSearchREST.stdHeaders},
 				success: function (data: any) {
-						 let headers: SPRESTTypes.THttpRequestHeaders = elements.headers as SPRESTTypes.THttpRequestHeaders;
+						 let headers: THttpRequestHeaders = elements.headers as THttpRequestHeaders;
 
 						 if (elements.headers) {
 							  headers["Content-Type"] = "application/json;odata=verbose";
@@ -46,7 +42,7 @@ export class SPSearchREST {
 						method: elements.method,
 						headers: headers,
 						data: elements.body ?? elements.data as string,
-						success: function (data: SPRESTTypes.TSPResponseData, status: string, requestObj: JQueryXHR) {
+						success: function (data: TSPResponseData, status: string, requestObj: JQueryXHR) {
 							elements.successCallback!(data, status, requestObj);
 						},
 						error: function (requestObj: JQueryXHR, status: string, thrownErr: string) {
@@ -70,9 +66,9 @@ export class SPSearchREST {
 				method: elements.method,
 				headers: elements.headers,
 				data: elements.body ?? elements.data as string,
-				success: (data: SPRESTTypes.TSPResponseData, status: string, requestObj: JQueryXHR) => {
+				success: (data: TSPResponseData, status: string, requestObj: JQueryXHR) => {
 					if (data.d && data.__next)
-					SPRESTSupportLib.RequestAgain(
+					RequestAgain(
 							elements,
 							data.__next,
 							data.results!
@@ -91,14 +87,14 @@ export class SPSearchREST {
 		}
 	}
 
-	static httpRequestPromise(parameters: SPRESTTypes.THttpRequestParamsWithPromise) {
+	static httpRequestPromise(parameters: THttpRequestParamsWithPromise) {
 		return new Promise((resolve, reject) => {
 			SPSearchREST.httpRequest({
 				setDigest: parameters.setDigest,
 				url: parameters.url,
 				method: parameters.method ? parameters.method : "GET",
 				headers: parameters.headers,
-				data: parameters.data ?? parameters.body as SPRESTTypes.TXmlHttpRequestData,
+				data: parameters.data ?? parameters.body as TXmlHttpRequestData,
 				successCallback: (data, message, reqObj) => {
 					resolve({data: data, message: message, reqObj: reqObj});
 				},

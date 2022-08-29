@@ -1,13 +1,13 @@
 "use strict";
 
-export enum requestType {
+enum requestType {
    TYPE_CURRENT_USER,
    TYPE_ID,
    TYPE_LAST_NAME,
    TYPE_FULL_NAME
 };
 
-export const ListItemEntityTypeRE = /EntityType|EntityTypeName|ListItemEntityTypeFullName|metadata/,
+const ListItemEntityTypeRE = /EntityType|EntityTypeName|ListItemEntityTypeFullName|metadata/,
 		ListFieldEntityTypeRE = /Entity.*Type|metadata/,
 		ListEntityTypeRE = /List.*Entity.*Type|Entity.*Type|metadata/,
 		ContentTypeEntityTypeRE = /Content.*Entity.*Type|Entity.*Type|metadata/,
