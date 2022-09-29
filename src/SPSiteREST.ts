@@ -241,7 +241,7 @@ export class SPSiteREST {
 						sites.push({
 							name: result.Title,
 							serverRelativeUrl: result.ServerRelativeUrl,
-							id: result.Id as string,
+							id: result.Id,
 							template: result.WebTemplate
 						});
 					resolve(sites);

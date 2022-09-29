@@ -1,5 +1,16 @@
 "use strict";
 
+import {
+		THttpRequestHeaders,
+		THttpRequestParams,
+		TSPResponseData,
+		THttpRequestParamsWithPromise,
+		TXmlHttpRequestData
+	} from '../@types/index';
+import {
+		RequestAgain
+	} from './SPRESTSupportLib';
+
 /**
  *
  * @class  representing parameters to establish interface with a site
