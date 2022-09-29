@@ -2,10 +2,24 @@
 
 /* jshint -W119, -W069 */
 
+import {
+		THttpRequestHeaders,
+		TSiteInfo,
+		THttpRequestParams,
+		THttpRequestBody,
+		TSPResponseData,
+		THttpRequestParamsWithPromise,
+		TXmlHttpRequestData,
+		TParsedURL,
+		IBatchHTTPRequestForm
+	} from '../@types/index';
+import { SPListREST } from './SPListREST';
+import * as SPRESTSupportLib from './SPRESTSupportLib';
+
 /**
  * @class SPSiteREST
  */
-class SPSiteREST {
+export class SPSiteREST {
 	server: string;
 	sitePath: string;
 	apiPrefix: string;
@@ -151,7 +165,7 @@ class SPSiteREST {
 				data: elements.body ?? elements.data as string,
 				success: function (data: TSPResponseData, status: string, requestObj: JQueryXHR) {
 					if (data.d && data.__next)
-						RequestAgain(
+						SPRESTSupportLib.RequestAgain(
 							elements,
 							data.__next,
 							data.results!
@@ -194,7 +208,7 @@ class SPSiteREST {
 	 */
 	getProperties(parameters?: any) {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/site" + constructQueryParameters(parameters)
+			url: this.apiPrefix + "/site" + SPRESTSupportLib.constructQueryParameters(parameters)
 		});
 	}
 
@@ -204,7 +218,7 @@ class SPSiteREST {
 
 	getWebProperties(parameters?: any) {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web" + constructQueryParameters(parameters)
+			url: this.apiPrefix + "/web" + SPRESTSupportLib.constructQueryParameters(parameters)
 		});
 	}
 
@@ -255,7 +269,8 @@ class SPSiteREST {
 		});
 	}
 
-	getSitePedigree(siteUrl: string | null): Promise<{pedigree: TSiteInfo; arrayPedigree: TSiteInfo[]}> {
+	getSitePedigree(siteUrl: string | null):
+				Promise<{pedigree: TSiteInfo; arrayPedigree: TSiteInfo[]}> {
 		return new Promise((resolve, reject) => {
 			let pedigree: TSiteInfo = {},
 
@@ -290,7 +305,7 @@ class SPSiteREST {
 				siteInfo.server = this.server;
 				siteInfo.serverRelativeUrl = this.serverRelativeUrl;
 			} else {
-				let parsedUrl: TParsedURL | null = ParseSPUrl(siteUrl);
+				let parsedUrl: TParsedURL | null = SPRESTSupportLib.ParseSPUrl(siteUrl);
 
 				if (parsedUrl == null)
 					throw "Parameter 'siteUrl' was not a parseable SharePoint URL";
@@ -366,19 +381,19 @@ class SPSiteREST {
 
 	getSiteColumns(parameters: any): Promise<any> {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/fields" + constructQueryParameters(parameters)
+			url: this.apiPrefix + "/web/fields" + SPRESTSupportLib.constructQueryParameters(parameters)
 		});
 	}
 
 	getSiteContentTypes(parameters: any): Promise<any> {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/ContentTypes" + constructQueryParameters(parameters)
+			url: this.apiPrefix + "/web/ContentTypes" + SPRESTSupportLib.constructQueryParameters(parameters)
 		});
 	}
 
 	getLists(parameters?: any):Promise<any> {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists" + constructQueryParameters(parameters)
+			url: this.apiPrefix + "/web/lists" + SPRESTSupportLib.constructQueryParameters(parameters)
 		});
 	}
 
@@ -390,9 +405,9 @@ class SPSiteREST {
 	createList(parameters: {body: THttpRequestBody}) {
 		let body: THttpRequestBody | string = parameters.body;
 
-		if (checkEntityTypeProperty(body, "item") == false)
+		if (SPRESTSupportLib.checkEntityTypeProperty(body, "item") == false)
 			body["__SetType__"] = "SP.List";
-		body = formatRESTBody(body);
+		body = SPRESTSupportLib.formatRESTBody(body);
 		return SPSiteREST.httpRequestPromise({
 			setDigest: true,
 			url: this.apiPrefix + "/web/lists",
@@ -409,9 +424,9 @@ class SPSiteREST {
 	updateListByMerge(parameters: {body: THttpRequestBody, listGuid: string}) {
 		let body: THttpRequestBody | string = parameters.body;
 
-		if (checkEntityTypeProperty(body, "item") == false)
+		if (SPRESTSupportLib.checkEntityTypeProperty(body, "item") == false)
 			body["__SetType__"] = "SP.List";
-		body = formatRESTBody(body);
+		body = SPRESTSupportLib.formatRESTBody(body);
 		return SPSiteREST.httpRequestPromise({
 			setDigest: true,
 			url: this.apiPrefix + "/web/lists" +
@@ -634,7 +649,7 @@ class SPSiteREST {
 							"ServerRelativeUrl": item.serverRelativeUrl
 						 }
 					});
-					batchRequestingQueue(
+					SPRESTSupportLib.batchRequestingQueue(
 					{host: destLib.server, path: destLib.site,
 						AllHeaders: SPSiteREST.stdHeaders, AllMethods: "POST"},
 					requests

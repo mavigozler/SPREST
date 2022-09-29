@@ -1,21 +1,22 @@
 "use strict";
-
-/*
-import * as SPRESTGlobals from './SPRESTGlobals';
-import * as SPRESTTypes from './SPRESTtypes';
-*/
 /* jshint -W069, -W119 */
 
-type TFetchInfo = {
-	RequestedUrl: string;
-	HttpStatus: number;
-	ContentType: string | null;
-	Etag: string | null; // \"\d{3}\"
-	Data: any;
-	ProcessedData: any[];
-};
+import {
+		THttpRequestHeaders,
+		THttpRequestParams,
+		TXmlHttpRequestData,
+		TSPResponseData,
+		THttpRequestMethods,
+		IBatchHTTPRequestParams,
+		IBatchHTTPRequestForm,
+		THttpRequestProtocol,
+		TParsedURL,
+		TSPResponseDataProperties,
+		TFetchInfo
+	} from '../@types/index';
+import * as SPRESTGlobals from './SPRESTGlobals';
 
-const SPstdHeaders: THttpRequestHeaders = {
+export const SPstdHeaders: THttpRequestHeaders = {
 	"Content-Type":"application/json;odata=verbose",
 	"Accept":"application/json;odata=verbose"
 };
@@ -23,7 +24,7 @@ const SPstdHeaders: THttpRequestHeaders = {
 let SelectAllCheckboxes: string, // defined below
 	UnselectAllCheckboxes: string;
 
-class SPServerREST {
+export class SPServerREST {
 	URL: string;
 	apiPrefix: string;
 
@@ -65,7 +66,7 @@ class SPServerREST {
 						method: !elements.method ? "GET" : elements.method,
 						headers: headers,
 						data: (elements.body ?? elements.data) as TXmlHttpRequestData,
-						success: (data: any, status: string, requestObj: JQueryXHR) => {
+						success: (data: TSPResponseData, status: string, requestObj: JQueryXHR) => {
 							elements.successCallback(data, status, requestObj);
 						},
 						error: function (requestObj: JQueryXHR, status: string, thrownErr: string) {
@@ -95,7 +96,7 @@ class SPServerREST {
 								  elements,
 									data.d.__next,
 									data.d.results
-							  ).then((response: any) => {
+							  ).then((response: TSPResponseData) => {
 									elements.successCallback(response);
 							  }).catch((response: any) => {
 									elements.errorCallback(response);
@@ -160,7 +161,7 @@ class SPServerREST {
 	};
 }
 
-const MAX_REQUESTS = 500;
+export const MAX_REQUESTS = 500;
 
 /**
  * @function batchRequestingQueue -- when requests are too large in number (> MAX_REQUESTS), the batching
@@ -177,7 +178,7 @@ const MAX_REQUESTS = 500;
  *       url: string -- the valid REST URL to a SP resource
  *       method?: httpRequestMethods -- valid HTTP protocol verb in the request
  */
-function batchRequestingQueue(
+export function batchRequestingQueue(
 	elements: IBatchHTTPRequestParams,
 	allRequests: IBatchHTTPRequestForm[]
 ): Promise<{success: TFetchInfo[], error: TFetchInfo[]}> {
@@ -363,13 +364,13 @@ function singleBatchRequest(
 						});
 					},
 					// error completing the batch request
-					error: (reqObj: object) => {
+					error: (reqObj: JQueryXHR) => {
 						reject(reqObj);
 					}
 				});
 			},
 			// Error getting POST token
-			error: (reqObj: object) => {
+			error: (reqObj: JQueryXHR) => {
 				reject(reqObj);
 			}
 		});
@@ -547,11 +548,10 @@ function SPListColumnCopy(
  * @param {object}  JsonBody -- JS object which conforms to JSON rules. Must be "field_properties" : "field_values" format
  *                    If one of the properties is "__SetType__", it will fix the "__metadata" property
  */
-function formatRESTBody(JsonBody: { [key: string]: string | object } | string ): string {
-   let testString: string, testBody: object,
-
-
-	temp: any;
+export function formatRESTBody(JsonBody: { [key: string]: string | object } | string ): string {
+   let testString: string,
+		testBody: object,
+		temp: any;
 
    try {
       testString = JSON.stringify(JsonBody);
@@ -584,19 +584,19 @@ function formatRESTBody(JsonBody: { [key: string]: string | object } | string ):
 	return temp;
 }
 
-function checkEntityTypeProperty(body: object, typeCheck: string) {
+export function checkEntityTypeProperty(body: object, typeCheck: string) {
 	let checkRE: RegExp;
 
 	if (typeCheck == "item")
-		checkRE = ListItemEntityTypeRE;
+		checkRE = SPRESTGlobals.ListItemEntityTypeRE;
 	else if (typeCheck == "list")
-		checkRE = ListEntityTypeRE;
+		checkRE = SPRESTGlobals.ListEntityTypeRE;
 	else if (typeCheck == "field")
-		checkRE = ListFieldEntityTypeRE;
+		checkRE = SPRESTGlobals.ListFieldEntityTypeRE;
 	else if (typeCheck == "content type")
-		checkRE = ContentTypeEntityTypeRE;
+		checkRE = SPRESTGlobals.ContentTypeEntityTypeRE;
 	else if (typeCheck == "view")
-		checkRE = ViewEntityTypeRE;
+		checkRE = SPRESTGlobals.ViewEntityTypeRE;
 	else
 		return false;
 	for (let property in body)
@@ -623,7 +623,7 @@ function checkEntityTypeProperty(body: object, typeCheck: string) {
 				parsed after the query identifier character '?'
  */
 
-function ParseSPUrl (url: string): TParsedURL | null {
+export function ParseSPUrl (url: string): TParsedURL | null {
 	const urlRE = /(https?:\/\/[^\/]+)|(\/[^\/\?]+)/g;
 	let index: number,
 		urlParts: RegExpMatchArray | null,
@@ -635,7 +635,7 @@ function ParseSPUrl (url: string): TParsedURL | null {
 		pathDone: boolean = false,
 		fName: string | null = null,
 		listName: string | null = null,
-		tmpArr: any[] = [];
+		tmpArr: unknown[] = [];
 
 	if (!url)
 		url = location.href;
@@ -705,8 +705,12 @@ function ParseSPUrl (url: string): TParsedURL | null {
  * @returns -- the return operations are to unwind the recursion in the processing
  *           to get to either resolve or reject operations
  */
-function serialSPProcessing(opFunction: (arg1: any) => Promise<any>, itemset: any[]): Promise<any> {
+export function serialSPProcessing(
+	opFunction: (arg1: any) => Promise<any>,
+	itemset: any[]
+): Promise<any> {
 	let responses: any[] = [ ];
+
 	return new Promise((resolve) => {
 		function iterate(index: number) {
 			let datum: any;
@@ -726,7 +730,7 @@ function serialSPProcessing(opFunction: (arg1: any) => Promise<any>, itemset: an
 	});
 }
 
-function constructQueryParameters(parameters: {[key:string]: any | any[] }): string {
+export function constructQueryParameters(parameters: {[key:string]: any | any[] }): string {
 	let query: string = "",
 		odataFunctions = ["filter", "select", "expand", "top", "count", "skip"];
 
@@ -759,7 +763,7 @@ function constructQueryParameters(parameters: {[key:string]: any | any[] }): str
  *     input: radio, checkbox
  * @returns {primitive data type | array | null} -- usually numeric or string representing choice from radio input object
  */
- function getCheckedInput(inputObj: HTMLInputElement | RadioNodeList): null | string | string[] {
+ export function getCheckedInput(inputObj: HTMLInputElement | RadioNodeList): null | string | string[] {
 	if ((inputObj as RadioNodeList).length) { // multiple checkbox
 		let checked: string[] = [];
 
@@ -784,7 +788,7 @@ function constructQueryParameters(parameters: {[key:string]: any | any[] }): str
 *        radio selection
 & @returns boolean  true if value set/utilized, false otherwise
 */
-function setCheckedInput(
+export function setCheckedInput(
 	inputObj: HTMLInputElement & RadioNodeList,
 	value: string | string[] | null
 ): boolean {
@@ -814,7 +818,7 @@ function setCheckedInput(
  * @param {string} delimiter [optional] -- character that will delimit the result string; default is '/'
  * @returns {string} -- MM[d]DD[d]YYYY-formatted string.
  */
-function formatDateToMMDDYYYY(
+export function formatDateToMMDDYYYY(
 		dateInput: string,
 		delimiter: string = "/"
 ): string | null {
@@ -830,7 +834,7 @@ function formatDateToMMDDYYYY(
 }
 
 
-function fixValueAsDate(date: Date): Date | null {
+export function fixValueAsDate(date: Date): Date | null {
 	let datestring: RegExpMatchArray | null = date.toISOString().match(/(\d{4})\-(\d{2})\-(\d{2})/);
 
 	if (datestring == null)
@@ -842,7 +846,7 @@ function fixValueAsDate(date: Date): Date | null {
 // This will parse a delimited string into an array of
 // arrays. The default delimiter is the comma, but this
 // can be overriden in the second argument.
-function CSVToArray(
+export function CSVToArray(
 		strData: string,
 		strDelimiter: string = "," // default delimiter is ','
 ): string[][] {
@@ -1264,7 +1268,7 @@ function CSVToArray(
  * @param {object} obj -- basically any variable that may or may not be iterable
  * @returns boolean - true if iterable, false if not
  */
- function isIterable(obj: any) {
+ export function isIterable(obj: any) {
 	// checks for null and undefined
 	if (obj == null)
 		 return false;
@@ -1272,14 +1276,14 @@ function CSVToArray(
  }
 
 // off the Internet
-function createGuid(){
+export function createGuid(){
 	function S4() {
 		return (1 + Math.random() * 0x10000 | 0).toString(16).substring(1);
 	}
 	return (S4() + S4() + "-" + S4() + "-4" + S4().substring(0,3) + "-" + S4() + "-" + S4() + S4() + S4()).toLowerCase();
 }
 
-function createFileDownload(parameters: {
+export function createFileDownload(parameters: {
 	href: string;
 	downloadFileName: string;
 	newTab?: boolean;
@@ -1312,7 +1316,7 @@ function createFileDownload(parameters: {
  * @param dropDivContainerId -- an outer DIV to contain the drag and drop. Useful to
  *     better decorate the div
  */
-function openFileUpload(
+export function openFileUpload(
 	callback: (fileList: FileList) => void
 ): void {
 	let containerDiv: HTMLDivElement = document.createElement("div"),
@@ -1416,7 +1420,7 @@ function disabledClick(evt: Event) {
 * @returns {object} all the data or error information via callbacks
 */
 
-function RESTrequest(elements: THttpRequestParams): void {
+export function RESTrequest(elements: THttpRequestParams): void {
 	if (elements.setDigest && elements.setDigest == true) {
  		let match: RegExpMatchArray = elements.url.match(/(.*\/_api)/) as RegExpMatchArray;
 
@@ -1484,7 +1488,7 @@ function RESTrequest(elements: THttpRequestParams): void {
 	}
 }
 
-function RequestAgain(
+export function RequestAgain(
 		elements: THttpRequestParams,
 		nextUrl: string,
 		aggregateData: TSPResponseDataProperties[]
@@ -1516,7 +1520,7 @@ function RequestAgain(
 	});
 }
 
-const
+export const
    SPListTemplateTypes = {
       enums: [
          { name: "InvalidType",     typeId: -1 },
@@ -1855,3 +1859,4 @@ SelectAllCheckboxes =
 
 UnselectAllCheckboxes =
     "data:image/png;base64,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";
+

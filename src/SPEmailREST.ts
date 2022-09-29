@@ -23,6 +23,8 @@
  *           to be separated by a SEMI-COLON!
  */
 
+import { TSPResponseData } from '../@types/index';
+
 interface IEmailHeaders {
 	To: string;
 	Subject: string;
@@ -31,7 +33,7 @@ interface IEmailHeaders {
 	BCC?: string | null;
 	From?: string | null;
 }
-class SPUtilityEmailService {
+export class SPUtilityEmailService {
     server: string;
     site: string;
 
@@ -46,7 +48,9 @@ class SPUtilityEmailService {
     }
 
     structureMultipleAddresses (addressList: string): string {
-        let i: number, temp: any;
+        let i: number,
+            temp: string[];
+
         if (!addressList || addressList == null) return "";
         if (addressList.search(/,/) >= 0) throw "A multiple email address list appears to be comma-separated in a string\n" + "Use a semicolon-separated set of addresses";
         if (addressList.search(/;/) < 0) return addressList;
@@ -103,10 +107,10 @@ class SPUtilityEmailService {
                     "Accept": "application/json;odata=verbose"
                 },
                 contentType: "application/json;odata=verbose",
-                success: (responseJSON: any) => {
-                    var digValue,
+                success: (responseJSON: TSPResponseData) => {
+                    let digValue = responseJSON!.d!.GetContextWebInformation!.FormDigestValue;
                         // the actual transmission
-                        digValue = responseJSON.d.GetContextWebInformation.FormDigestValue;
+
                     $.ajax({
                         url: "https://" + uri + "/_api/SP.Utilities.Utility.SendEmail",
                         method: "POST",
@@ -125,20 +129,20 @@ class SPUtilityEmailService {
                             }
                         }),
                         contentType: "application/json;odata=verbose",
-                        success: (data: any, message: string, reqObj: JQueryXHR) => {
+                        success: (data: TSPResponseData, message: string, reqObj: JQueryXHR) => {
                             resolve(reqObj.status);
                             console.log("Email success");
                         },
-                        error: (reqObj: any) => {
+                        error: (reqObj: JQueryXHR) => {
                             reject(reqObj);
                             console.log("Email failure: " + "\n  HTTP Status: " + reqObj.status + "\n  Message: " + reqObj.responseJSON.error.message.value);
                         }
                     });
                 },
-                error: function(responseObj: any) {
+                error: (responseObj: JQueryXHR) => {
                     // this = request object
-                    alert("ERROR!\n\n" + "Contact the developer with this error message below\n\n" + "URL: " + this.url + "\n" + "Message: " +
-                            responseObj.name + ": " + responseObj.message);
+                    alert("ERROR!\n\n" + "Contact the developer with this error message below\n\nMessage: " +
+                            JSON.stringify(responseObj.responseJSON, null, "  "));
                 }
             });
         });
@@ -155,7 +159,7 @@ class SPUtilityEmailService {
 //   .To : To addressee; optional if the global constant
 //           DEVELOPER_MAIL_ADDRESS is defined with proper email address
 
-function emailDeveloper(parameters : {
+export function emailDeveloper(parameters : {
     server: string;
     site: string;
     errorObj?: object;

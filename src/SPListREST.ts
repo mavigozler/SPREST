@@ -2,12 +2,24 @@
 
 /* jshint -W119, -W069, -W083 */
 
-/*
-import * as SPRESTTypes from './SPRESTtypes';
+import {
+		TLookupFieldInfo,
+		TListSetup,
+		TSiteInfo,
+		THttpRequestHeaders,
+		THttpRequestBody,
+		THttpRequestParams,
+		TIntervalControl,
+		TSPResponseData,
+		THttpRequestParamsWithPromise,
+		TXmlHttpRequestData,
+		TSPDocLibCheckInType,
+		IBatchHTTPRequestParams,
+		IBatchHTTPRequestForm
+	} from '../@types/index';
 import { SPSiteREST } from './SPSiteREST';
 import * as SPRESTSupportLib from './SPRESTSupportLib';
-import * as SPRESTGlobals from './SPRESTGlobals';
-*/
+
 /***************************************************************
  *  Basic interface
  * 		spList = new SPListREST(setup: TListSetup)
@@ -19,7 +31,7 @@ import * as SPRESTGlobals from './SPRESTGlobals';
 /**
  * @class SPListREST  -- constructor for interface to making REST request for SP Lists
  */
-class SPListREST {
+export class SPListREST {
 	protocol: string;
 	server: string;
 	site: string;
@@ -116,7 +128,7 @@ class SPListREST {
 				headers: SPListREST.stdHeaders,
 				success: (data) => {
 					let loopData: any[],
-						lookupFieldTypeNum = SPFieldTypes.getFieldTypeIdFromTypeName("Lookup");
+						lookupFieldTypeNum = SPRESTSupportLib.SPFieldTypes.getFieldTypeIdFromTypeName("Lookup");
 
 					data = data.d;
 					this.baseUrl = this.server + this.site;
@@ -141,7 +153,7 @@ class SPListREST {
 							// for doc libs, look for "Link To Document" content type and store its content type ID
 					// one more trip to the network to get any lookup field information
 					this.getLookupFieldsInfo().then((response) => {
-						if (isIterable(loopData = data.ContentTypes.results) == true) {
+						if (SPRESTSupportLib.isIterable(loopData = data.ContentTypes.results) == true) {
 							let i;
 
 							for (i = 0; i < loopData.length; i++)
@@ -175,7 +187,8 @@ class SPListREST {
 				site: this.site
 			});
 			siteREST.init().then(() => {
-				siteREST.getSitePedigree(null).then(({pedigree, arrayPedigree}) => {
+				siteREST.getSitePedigree(null).then(
+					({pedigree: pedigree, arrayPedigree: arrayPedigree}) => {
 	// after site pedigree, collect the lookup fields and lists as
 					let lookupFields: any[] = [],
 						requests: Promise<any>[] = [];
@@ -334,7 +347,7 @@ class SPListREST {
 						}
 						// if the loop found the result and set it, this condition is ready
 						if (siteResult != null) {
-							siteName = ParseSPUrl(siteResult)!.siteFullPath;
+							siteName = SPRESTSupportLib.ParseSPUrl(siteResult)!.siteFullPath;
 							lookupList = parameters.LookupList.match(/^\{?([^\}]+)\}?$/)![1];
 							collectItemData(this.protocol + this.server + siteName + "/_api/web/lists(guid'" + lookupList +
 										"')/items?$select=Id," + parameters.LookupField);
@@ -655,7 +668,7 @@ class SPListREST {
 	// query: [optional]
 	getProperties (parameters: any): Promise<any> {
 		return new Promise((resolve, reject) => {
-			let query: string = constructQueryParameters(parameters);
+			let query: string = SPRESTSupportLib.constructQueryParameters(parameters);
 
 			SPListREST.httpRequestPromise({
 				url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')" + query,
@@ -808,7 +821,7 @@ class SPListREST {
 			throw "The object argument to createListItem() must have a 'body' property";
 //		if (this.checkEntityTypeProperty(body, "item") == false)
 //			body["__SetType__"] = this.listItemEntityTypeFullName;
-		body = formatRESTBody(body);
+		body = SPRESTSupportLib.formatRESTBody(body);
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
 			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
@@ -833,7 +846,7 @@ class SPListREST {
 					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/items",
 					body: item.body
 				});
-			return batchRequestingQueue({
+			return SPRESTSupportLib.batchRequestingQueue({
 				host: this.server,
 				path: this.site,
 				AllHeaders: {
@@ -844,7 +857,7 @@ class SPListREST {
 		}
 	// the alternative to batching
 		return new Promise((resolve, reject) => {
-			serialSPProcessing(this.createListItem, items).then((response: any) => {
+			SPRESTSupportLib.serialSPProcessing(this.createListItem, items).then((response: any) => {
 				resolve(response);
 			}).catch((response: any) => {
 				reject(response);
@@ -865,9 +878,9 @@ class SPListREST {
 
 		return new Promise((resolve, reject) => {
 			this.fixBodyForSpecialFields(body as THttpRequestBody).then((body: any) => {
-				if (checkEntityTypeProperty(body, "item") == false)
+				if (SPRESTSupportLib.checkEntityTypeProperty(body, "item") == false)
 					body["__SetType__"] = this.listItemEntityTypeFullName;
-				body = formatRESTBody(body);
+				body = SPRESTSupportLib.formatRESTBody(body);
 				SPListREST.httpRequestPromise({
 					setDigest: true,
 					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
@@ -899,7 +912,7 @@ class SPListREST {
 							item.id + ")",
 					body: item.body
 				});
-			return batchRequestingQueue({
+			return SPRESTSupportLib.batchRequestingQueue({
 				host: this.server,
 				path: this.site,
 				AllHeaders: {
@@ -911,7 +924,7 @@ class SPListREST {
 		}
 	// the alternative to batching
 		return new Promise((resolve, reject) => {
-			serialSPProcessing(this.updateListItem, itemsArray).then((response: any) => {
+			SPRESTSupportLib.serialSPProcessing(this.updateListItem, itemsArray).then((response: any) => {
 				resolve(response);
 			}).catch((response: any) => {
 				reject(response);
@@ -1067,7 +1080,7 @@ class SPListREST {
 	getFolderFilesOptionalQuery(parameters: {
 		folderPath: string;
 	}): Promise<any> {
-		let query: string = constructQueryParameters(parameters);
+		let query: string = SPRESTSupportLib.constructQueryParameters(parameters);
 		return SPListREST.httpRequestPromise({
 			url: this.apiPrefix +	"/web/getFolderByServerRelativeUrl('" + this.baseUrl +
 						parameters.folderPath + "')/Files" + query,
@@ -1298,7 +1311,7 @@ class SPListREST {
 				url: this.apiPrefix + "/web/GetFileByServerRelativeUrl('" + itemName +
 						"')/CheckIn(comment='" + parameters.checkInComment + "',checkintype=" + checkinType + ")"
 			});
-		return batchRequestingQueue({
+		return SPRESTSupportLib.batchRequestingQueue({
 			AllMethods: "POST"
 		} as IBatchHTTPRequestParams, requests);
 	}
@@ -1348,7 +1361,7 @@ class SPListREST {
 				"X-HTTP-METHOD": "MERGE",
 				"IF-MATCH": "*" // can also use etag
 			},
-			body: formatRESTBody({
+			body: SPRESTSupportLib.formatRESTBody({
 				FileLeafRef: parameters.itemName ? parameters.itemName : parameters.newName
 			}),
 		});
@@ -1631,9 +1644,9 @@ class SPListREST {
 	}): Promise<any> {
 		let body: THttpRequestBody | string = fieldProperties;
 
-		if (checkEntityTypeProperty(body, "field") == false)
+		if (SPRESTSupportLib.checkEntityTypeProperty(body, "field") == false)
 			body.__SetType__ = "SP.Field";
-		body = formatRESTBody(body);
+		body = SPRESTSupportLib.formatRESTBody(body);
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
 			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields",
@@ -1658,15 +1671,15 @@ class SPListREST {
 
 			for (let fld of fields) {
 				body = fld;
-				if (checkEntityTypeProperty(body, "field") == false)
+				if (SPRESTSupportLib.checkEntityTypeProperty(body, "field") == false)
 					body.__SetType__ = "SP.Field";
 				requests.push({
 					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields",
 					method: "POST",
-					body: JSON.parse(formatRESTBody(body))
+					body: JSON.parse(SPRESTSupportLib.formatRESTBody(body))
 				});
 			}
-			batchRequestingQueue({
+			SPRESTSupportLib.batchRequestingQueue({
 				host: this.server,
 				path: this.site,
 				AllHeaders: SPListREST.stdHeaders,
@@ -1701,7 +1714,7 @@ class SPListREST {
 		body = {
 			"Title": parameters.newName
 		};
-		if (checkEntityTypeProperty(body, "field") == false)
+		if (SPRESTSupportLib.checkEntityTypeProperty(body, "field") == false)
 			body["__SetType__"] = "SP.Field";
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
@@ -1712,7 +1725,7 @@ class SPListREST {
 				"X-HTTP-METHOD": "MERGE",
 				"IF-MATCH": "*"
 			},
-			body: formatRESTBody(body)
+			body: SPRESTSupportLib.formatRESTBody(body)
 		});
 	}
 
@@ -1780,7 +1793,7 @@ class SPListREST {
 			}
 		}
 		if (parameters && parameters.query)
-			query = constructQueryParameters(parameters.query);
+			query = SPRESTSupportLib.constructQueryParameters(parameters.query);
 		return SPListREST.httpRequestPromise({
 			url: this.apiPrefix + "/web/lists(guid'" +
 					this.listGuid + "')/contentTypes" + query,
@@ -1845,7 +1858,7 @@ class SPListREST {
 			}
 		}
 		if (parameters && parameters.query)
-			query = constructQueryParameters(parameters.query);
+			query = SPRESTSupportLib.constructQueryParameters(parameters.query);
 		return SPListREST.httpRequestPromise({
 			url: this.apiPrefix + "/web/lists(guid'" +
 					this.listGuid + "')/views" + query,
@@ -1861,9 +1874,9 @@ class SPListREST {
 	createView(viewsProperties: THttpRequestBody): Promise<any> {
 		let body: THttpRequestBody | string = viewsProperties;
 
-		if (checkEntityTypeProperty(body, "view") == false)
+		if (SPRESTSupportLib.checkEntityTypeProperty(body, "view") == false)
 			body.__SetType__ = "SP.View";
-		body = formatRESTBody(body);
+		body = SPRESTSupportLib.formatRESTBody(body);
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
 			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/views",
@@ -1883,7 +1896,7 @@ class SPListREST {
 			url: this.apiPrefix + "/web/GetList(@a1)/Views(@a2)/SetViewXml()?@a1='" +
 					this.serverRelativeUrl + "'&@a2='" + this.listGuid + "'",
 			method: "POST",
-			body: {"ViewXml": "<View Name=\"{" + createGuid() + "}\" DefaultView=\"FALSE\" MobileView=\"TRUE\" " +
+			body: {"ViewXml": "<View Name=\"{" + SPRESTSupportLib.createGuid() + "}\" DefaultView=\"FALSE\" MobileView=\"TRUE\" " +
 					"MobileDefaultView=\"TRUE\" Type=\"HTML\" DisplayName=\"All Items\" " +
 					"Url=\"" + this.serverRelativeUrl + "/" + viewName + ".aspx\" Level=\"1\" " +
 					"BaseViewID=\"1\" ContentTypeID=\"0x\" ImageUrl=\"/_layouts/15/images/generic.png?rev=47\">" +
@@ -1904,7 +1917,7 @@ class SPListREST {
 		// field creation can not occur co-synchronously. One must complete before the
 		// next field creation can begin.
 		return new Promise((resolve, reject) => {
-			serialSPProcessing(this.createView, views).then((response: any) => {
+			SPRESTSupportLib.serialSPProcessing(this.createView, views).then((response: any) => {
 				resolve(response);
 			}).catch((response: any) => {
 				reject(response);
