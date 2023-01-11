@@ -1,22 +1,7 @@
 "use strict";
 /* jshint -W069, -W119 */
 
-import {
-		THttpRequestHeaders,
-		THttpRequestParams,
-		TXmlHttpRequestData,
-		TSPResponseData,
-		THttpRequestMethods,
-		IBatchHTTPRequestParams,
-		IBatchHTTPRequestForm,
-		THttpRequestProtocol,
-		TParsedURL,
-		TSPResponseDataProperties,
-		TFetchInfo
-	} from '../@types/index';
-import * as SPRESTGlobals from './SPRESTGlobals.js';
-
-export const SPstdHeaders: THttpRequestHeaders = {
+const SPstdHeaders: THttpRequestHeaders = {
 	"Content-Type":"application/json;odata=verbose",
 	"Accept":"application/json;odata=verbose"
 };
@@ -24,7 +9,7 @@ export const SPstdHeaders: THttpRequestHeaders = {
 let SelectAllCheckboxes: string, // defined below
 	UnselectAllCheckboxes: string;
 
-export class SPServerREST {
+class SPServerREST {
 	URL: string;
 	apiPrefix: string;
 
@@ -161,7 +146,7 @@ export class SPServerREST {
 	};
 }
 
-export const MAX_REQUESTS = 500;
+const MAX_REQUESTS = 500;
 
 /**
  * @function batchRequestingQueue -- when requests are too large in number (> MAX_REQUESTS), the batching
@@ -178,7 +163,7 @@ export const MAX_REQUESTS = 500;
  *       url: string -- the valid REST URL to a SP resource
  *       method?: httpRequestMethods -- valid HTTP protocol verb in the request
  */
-export function batchRequestingQueue(
+function batchRequestingQueue(
 	elements: IBatchHTTPRequestParams,
 	allRequests: IBatchHTTPRequestForm[]
 ): Promise<{success: TFetchInfo[], error: TFetchInfo[]}> {
@@ -548,7 +533,7 @@ function SPListColumnCopy(
  * @param {object}  JsonBody -- JS object which conforms to JSON rules. Must be "field_properties" : "field_values" format
  *                    If one of the properties is "__SetType__", it will fix the "__metadata" property
  */
-export function formatRESTBody(JsonBody: { [key: string]: string | object } | string ): string {
+function formatRESTBody(JsonBody: { [key: string]: string | object } | string ): string {
    let testString: string,
 		testBody: object,
 		temp: any;
@@ -584,19 +569,19 @@ export function formatRESTBody(JsonBody: { [key: string]: string | object } | st
 	return temp;
 }
 
-export function checkEntityTypeProperty(body: object, typeCheck: string) {
+function checkEntityTypeProperty(body: object, typeCheck: string) {
 	let checkRE: RegExp;
 
 	if (typeCheck == "item")
-		checkRE = SPRESTGlobals.ListItemEntityTypeRE;
+		checkRE = ListItemEntityTypeRE;
 	else if (typeCheck == "list")
-		checkRE = SPRESTGlobals.ListEntityTypeRE;
+		checkRE = ListEntityTypeRE;
 	else if (typeCheck == "field")
-		checkRE = SPRESTGlobals.ListFieldEntityTypeRE;
+		checkRE = ListFieldEntityTypeRE;
 	else if (typeCheck == "content type")
-		checkRE = SPRESTGlobals.ContentTypeEntityTypeRE;
+		checkRE = ContentTypeEntityTypeRE;
 	else if (typeCheck == "view")
-		checkRE = SPRESTGlobals.ViewEntityTypeRE;
+		checkRE = ViewEntityTypeRE;
 	else
 		return false;
 	for (let property in body)
@@ -623,7 +608,7 @@ export function checkEntityTypeProperty(body: object, typeCheck: string) {
 				parsed after the query identifier character '?'
  */
 
-export function ParseSPUrl (url: string): TParsedURL | null {
+function ParseSPUrl (url: string): TParsedURL | null {
 	const urlRE = /(https?:\/\/[^\/]+)|(\/[^\/\?]+)/g;
 	let index: number,
 		urlParts: RegExpMatchArray | null,
@@ -705,7 +690,7 @@ export function ParseSPUrl (url: string): TParsedURL | null {
  * @returns -- the return operations are to unwind the recursion in the processing
  *           to get to either resolve or reject operations
  */
-export function serialSPProcessing(
+function serialSPProcessing(
 	opFunction: (arg1: any) => Promise<any>,
 	itemset: any[]
 ): Promise<any> {
@@ -730,7 +715,7 @@ export function serialSPProcessing(
 	});
 }
 
-export function constructQueryParameters(parameters: {[key:string]: any | any[] }): string {
+function constructQueryParameters(parameters: {[key:string]: any | any[] }): string {
 	let query: string = "",
 		odataFunctions = ["filter", "select", "expand", "top", "count", "skip"];
 
@@ -763,7 +748,7 @@ export function constructQueryParameters(parameters: {[key:string]: any | any[] 
  *     input: radio, checkbox
  * @returns {primitive data type | array | null} -- usually numeric or string representing choice from radio input object
  */
- export function getCheckedInput(inputObj: HTMLInputElement | RadioNodeList): null | string | string[] {
+ function getCheckedInput(inputObj: HTMLInputElement | RadioNodeList): null | string | string[] {
 	if ((inputObj as RadioNodeList).length) { // multiple checkbox
 		let checked: string[] = [];
 
@@ -788,7 +773,7 @@ export function constructQueryParameters(parameters: {[key:string]: any | any[] 
 *        radio selection
 & @returns boolean  true if value set/utilized, false otherwise
 */
-export function setCheckedInput(
+function setCheckedInput(
 	inputObj: HTMLInputElement & RadioNodeList,
 	value: string | string[] | null
 ): boolean {
@@ -818,7 +803,7 @@ export function setCheckedInput(
  * @param {string} delimiter [optional] -- character that will delimit the result string; default is '/'
  * @returns {string} -- MM[d]DD[d]YYYY-formatted string.
  */
-export function formatDateToMMDDYYYY(
+function formatDateToMMDDYYYY(
 		dateInput: string,
 		delimiter: string = "/"
 ): string | null {
@@ -834,7 +819,7 @@ export function formatDateToMMDDYYYY(
 }
 
 
-export function fixValueAsDate(date: Date): Date | null {
+function fixValueAsDate(date: Date): Date | null {
 	let datestring: RegExpMatchArray | null = date.toISOString().match(/(\d{4})\-(\d{2})\-(\d{2})/);
 
 	if (datestring == null)
@@ -846,7 +831,7 @@ export function fixValueAsDate(date: Date): Date | null {
 // This will parse a delimited string into an array of
 // arrays. The default delimiter is the comma, but this
 // can be overriden in the second argument.
-export function CSVToArray(
+function CSVToArray(
 		strData: string,
 		strDelimiter: string = "," // default delimiter is ','
 ): string[][] {
@@ -935,7 +920,7 @@ export function CSVToArray(
  * @param {function} onChangeHandler   event handler when onchage occurs
  * @returns {string} DOM id attribute of containing DIV so that it can be removed as DOM node by caller
  */
- export function buildSelectSet(
+ function buildSelectSet(
 	parentNode: HTMLElement,   // DOM node to append the construct
 	nameOrGuid: string,   // used in tagging
 	options: {
@@ -1268,7 +1253,7 @@ export function CSVToArray(
  * @param {object} obj -- basically any variable that may or may not be iterable
  * @returns boolean - true if iterable, false if not
  */
- export function isIterable(obj: any) {
+ function isIterable(obj: any) {
 	// checks for null and undefined
 	if (obj == null)
 		 return false;
@@ -1276,14 +1261,14 @@ export function CSVToArray(
  }
 
 // off the Internet
-export function createGuid(){
+function createGuid(){
 	function S4() {
 		return (1 + Math.random() * 0x10000 | 0).toString(16).substring(1);
 	}
 	return (S4() + S4() + "-" + S4() + "-4" + S4().substring(0,3) + "-" + S4() + "-" + S4() + S4() + S4()).toLowerCase();
 }
 
-export function createFileDownload(parameters: {
+function createFileDownload(parameters: {
 	href: string;
 	downloadFileName: string;
 	newTab?: boolean;
@@ -1316,7 +1301,7 @@ export function createFileDownload(parameters: {
  * @param dropDivContainerId -- an outer DIV to contain the drag and drop. Useful to
  *     better decorate the div
  */
-export function openFileUpload(
+function openFileUpload(
 	callback: (fileList: FileList) => void
 ): void {
 	let containerDiv: HTMLDivElement = document.createElement("div"),
@@ -1420,7 +1405,7 @@ function disabledClick(evt: Event) {
 * @returns {object} all the data or error information via callbacks
 */
 
-export function RESTrequest(elements: THttpRequestParams): void {
+function RESTrequest(elements: THttpRequestParams): void {
 	let editedUrl: string = (elements.url.indexOf("http") == 0 ? elements.url :
 			"https://" + elements.url);
 	if (elements.setDigest && elements.setDigest == true) {
@@ -1490,7 +1475,7 @@ export function RESTrequest(elements: THttpRequestParams): void {
 	}
 }
 
-export function RequestAgain(
+function RequestAgain(
 		elements: THttpRequestParams,
 		nextUrl: string,
 		aggregateData: TSPResponseDataProperties[]
@@ -1522,7 +1507,6 @@ export function RequestAgain(
 	});
 }
 
-
 /**
  * @function findObjectPartByProperty --
  * @param {object} obj -- the object to be searched for properties or property values
@@ -1532,7 +1516,7 @@ export function RequestAgain(
  *      first instance (FIRST_ONLY) which is default
  * @returns
  */
- export function findObjectPartByProperty(
+function findObjectPartByProperty(
 	obj: any,
 	property: string | number,
 	allInstances: boolean = false
@@ -1603,8 +1587,7 @@ function searchArray(
     return null;
 }
 
-
-export const
+const
    SPListTemplateTypes = {
       enums: [
          { name: "InvalidType",     typeId: -1 },

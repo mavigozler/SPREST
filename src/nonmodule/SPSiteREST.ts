@@ -2,24 +2,10 @@
 
 /* jshint -W119, -W069 */
 
-import {
-		THttpRequestHeaders,
-		TSiteInfo,
-		THttpRequestParams,
-		THttpRequestBody,
-		TSPResponseData,
-		THttpRequestParamsWithPromise,
-		TXmlHttpRequestData,
-		TParsedURL,
-		IBatchHTTPRequestForm
-	} from '../@types/index';
-import { SPListREST } from './SPListREST';
-import * as SPRESTSupportLib from './SPRESTSupportLib';
-
 /**
  * @class SPSiteREST
  */
-export class SPSiteREST {
+class SPSiteREST {
 	server: string;
 	sitePath: string;
 	apiPrefix: string;
@@ -165,7 +151,7 @@ export class SPSiteREST {
 				data: elements.body ?? elements.data as string,
 				success: function (data: TSPResponseData, status: string, requestObj: JQueryXHR) {
 					if (data.d && data.__next)
-						SPRESTSupportLib.RequestAgain(
+						RequestAgain(
 							elements,
 							data.__next,
 							data.results!
@@ -208,7 +194,7 @@ export class SPSiteREST {
 	 */
 	getProperties(parameters?: any) {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/site" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.apiPrefix + "/site" + constructQueryParameters(parameters)
 		});
 	}
 
@@ -218,7 +204,7 @@ export class SPSiteREST {
 
 	getWebProperties(parameters?: any) {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.apiPrefix + "/web" + constructQueryParameters(parameters)
 		});
 	}
 
@@ -305,7 +291,7 @@ export class SPSiteREST {
 				siteInfo.server = this.server;
 				siteInfo.serverRelativeUrl = this.serverRelativeUrl;
 			} else {
-				let parsedUrl: TParsedURL | null = SPRESTSupportLib.ParseSPUrl(siteUrl);
+				let parsedUrl: TParsedURL | null = ParseSPUrl(siteUrl);
 
 				if (parsedUrl == null)
 					throw "Parameter 'siteUrl' was not a parseable SharePoint URL";
@@ -381,19 +367,19 @@ export class SPSiteREST {
 
 	getSiteColumns(parameters: any): Promise<any> {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/fields" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.apiPrefix + "/web/fields" + constructQueryParameters(parameters)
 		});
 	}
 
 	getSiteContentTypes(parameters: any): Promise<any> {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/ContentTypes" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.apiPrefix + "/web/ContentTypes" + constructQueryParameters(parameters)
 		});
 	}
 
 	getLists(parameters?: any):Promise<any> {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.apiPrefix + "/web/lists" + constructQueryParameters(parameters)
 		});
 	}
 
@@ -405,9 +391,9 @@ export class SPSiteREST {
 	createList(parameters: {body: THttpRequestBody}) {
 		let body: THttpRequestBody | string = parameters.body;
 
-		if (SPRESTSupportLib.checkEntityTypeProperty(body, "item") == false)
+		if (checkEntityTypeProperty(body, "item") == false)
 			body["__SetType__"] = "SP.List";
-		body = SPRESTSupportLib.formatRESTBody(body);
+		body = formatRESTBody(body);
 		return SPSiteREST.httpRequestPromise({
 			setDigest: true,
 			url: this.apiPrefix + "/web/lists",
@@ -424,9 +410,9 @@ export class SPSiteREST {
 	updateListByMerge(parameters: {body: THttpRequestBody, listGuid: string}) {
 		let body: THttpRequestBody | string = parameters.body;
 
-		if (SPRESTSupportLib.checkEntityTypeProperty(body, "item") == false)
+		if (checkEntityTypeProperty(body, "item") == false)
 			body["__SetType__"] = "SP.List";
-		body = SPRESTSupportLib.formatRESTBody(body);
+		body = formatRESTBody(body);
 		return SPSiteREST.httpRequestPromise({
 			setDigest: true,
 			url: this.apiPrefix + "/web/lists" +
@@ -649,7 +635,7 @@ export class SPSiteREST {
 							"ServerRelativeUrl": item.serverRelativeUrl
 						 }
 					});
-					SPRESTSupportLib.batchRequestingQueue(
+					batchRequestingQueue(
 					{host: destLib.server, path: destLib.site,
 						AllHeaders: SPSiteREST.stdHeaders, AllMethods: "POST"},
 					requests
