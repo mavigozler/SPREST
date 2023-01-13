@@ -12,7 +12,7 @@ import {
 		TXmlHttpRequestData,
 		TParsedURL,
 		IBatchHTTPRequestForm
-	} from '../@types/index';
+	} from './SPREST.types';
 import { SPListREST } from './SPListREST';
 import * as SPRESTSupportLib from './SPRESTSupportLib';
 

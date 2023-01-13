@@ -30,7 +30,7 @@ How to get info on all users through siteuserinfolist:
 
 */
 
-import { TSPResponseData } from '../@types/index';
+import { TSPResponseData } from './SPREST.types';
 import * as SPRESTGlobals from './SPRESTGlobals.js';
 
 type TUserSearch = {

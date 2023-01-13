@@ -23,7 +23,7 @@
  *           to be separated by a SEMI-COLON!
  */
 
-import { TSPResponseData } from '../@types/index';
+import { TSPResponseData } from './SPREST.types';
 
 interface IEmailHeaders {
 	To: string;

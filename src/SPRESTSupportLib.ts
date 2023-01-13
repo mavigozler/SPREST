@@ -13,7 +13,7 @@ import {
 		TParsedURL,
 		TSPResponseDataProperties,
 		TFetchInfo
-	} from '../@types/index';
+	} from './SPREST.types';
 import * as SPRESTGlobals from './SPRESTGlobals.js';
 
 export const SPstdHeaders: THttpRequestHeaders = {
