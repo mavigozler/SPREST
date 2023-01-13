@@ -6,7 +6,7 @@ import {
 		TSPResponseData,
 		THttpRequestParamsWithPromise,
 		TXmlHttpRequestData
-	} from './SPREST.types';
+	} from './SPRESTtypes';
 import {
 		RequestAgain
 	} from './SPRESTSupportLib';

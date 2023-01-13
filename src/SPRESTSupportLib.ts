@@ -12,8 +12,9 @@ import {
 		THttpRequestProtocol,
 		TParsedURL,
 		TSPResponseDataProperties,
-		TFetchInfo
-	} from './SPREST.types';
+		TFetchInfo,
+		HttpStatus
+	} from './SPRESTtypes';
 import * as SPRESTGlobals from './SPRESTGlobals.js';
 
 export const SPstdHeaders: THttpRequestHeaders = {
@@ -383,7 +384,7 @@ function splitRequests(
 ): Promise<{success: TFetchInfo[], error: TFetchInfo[] } | null> {
 	return new Promise((resolve, reject) => {
 		let idx: number,
-			httpCode: number,
+			httpCode: HttpStatus,
 			urlIndex: number = 0,
 			checkResponse: Promise<any>[] = [],
 			match: RegExpMatchArray | null,
@@ -394,7 +395,7 @@ function splitRequests(
 		if (allResponses == null)
 			return resolve(null);
 		for (let response of allResponses!) {
-			if ((httpCode = parseInt(response.match(/HTTP\/\d\.\d (\d{3})/)![1])) < 400) {
+			if ((httpCode = <HttpStatus>parseInt(response.match(/HTTP\/\d\.\d (\d{3})/)![1])) < 400) {
 				idx = fetchInfo.push({
 					RequestedUrl: requestedUrls[urlIndex++],
 					HttpStatus: httpCode,

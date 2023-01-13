@@ -16,7 +16,7 @@ import {
 		TSPDocLibCheckInType,
 		IBatchHTTPRequestParams,
 		IBatchHTTPRequestForm
-	} from './SPREST.types';
+	} from './SPRESTtypes';
 import { SPSiteREST } from './SPSiteREST';
 import * as SPRESTSupportLib from './SPRESTSupportLib';
 
