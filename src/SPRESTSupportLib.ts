@@ -1,31 +1,43 @@
 "use strict";
 /* jshint -W069, -W119 */
 
+
 import {
 		THttpRequestHeaders,
 		THttpRequestParams,
 		TXmlHttpRequestData,
 		TSPResponseData,
 		THttpRequestMethods,
-		IBatchHTTPRequestParams,
+		//IBatchHTTPRequestParams,
 		IBatchHTTPRequestForm,
 		THttpRequestProtocol,
 		TParsedURL,
 		TSPResponseDataProperties,
 		TFetchInfo,
-		HttpStatus
-	} from './SPRESTtypes';
-import * as SPRESTGlobals from './SPRESTGlobals.js';
+		HttpStatus,
+		TArrayToJSON,
+		TBatchResponse,
+		TBatchResponseRaw
+	} from './SPComponentTypes';
+import {
+	ListItemEntityTypeRE,
+	ListEntityTypeRE,
+	ListFieldEntityTypeRE,
+	ContentTypeEntityTypeRE,
+	ViewEntityTypeRE
+} from './SPRESTGlobals.js';
 
-export const SPstdHeaders: THttpRequestHeaders = {
+const SPstdHeaders: THttpRequestHeaders = {
 	"Content-Type":"application/json;odata=verbose",
 	"Accept":"application/json;odata=verbose"
 };
 
-let SelectAllCheckboxes: string, // defined below
+let
+SelectAllCheckboxes: string, // defined below
 	UnselectAllCheckboxes: string;
 
-export class SPServerREST {
+export
+class SPServerREST {
 	URL: string;
 	apiPrefix: string;
 
@@ -162,7 +174,8 @@ export class SPServerREST {
 	};
 }
 
-export const MAX_REQUESTS = 500;
+//export
+const MAX_REQUESTS = 75;
 
 /**
  * @function batchRequestingQueue -- when requests are too large in number (> MAX_REQUESTS), the batching
@@ -174,49 +187,80 @@ export const MAX_REQUESTS = 500;
  *       protocol?: string -- valid use of "http" or "https" with "://" added to it or not
  *       AllHeaders?: THttpRequestHeaders -- object of [key:string]: T; type, headers to apply to all requests in batch
  *       AllMethods?: string -- HTTP method to apply to all requests in batch
- * @param {IBatchHTTPRequestForm} allRequests -- the requests in singleBatchRequest
+ * @param {IBatchHTTPRequestForm[]} allRequests -- the requests in singleBatchRequest
  *    the BatchHTTPRequestForm object has following properties
  *       url: string -- the valid REST URL to a SP resource
  *       method?: httpRequestMethods -- valid HTTP protocol verb in the request
  */
-export function batchRequestingQueue(
-	elements: IBatchHTTPRequestParams,
+export
+function batchRequestingQueue(
 	allRequests: IBatchHTTPRequestForm[]
-): Promise<{success: TFetchInfo[], error: TFetchInfo[]}> {
+): Promise<TBatchResponse | null> {
 let allRequestsCopy: IBatchHTTPRequestForm[] = JSON.parse(JSON.stringify(allRequests)),
-	successResponses: TFetchInfo[] = [],
-	errorResponses: TFetchInfo[] = [],
-	subrequests: IBatchHTTPRequestForm[] = [];
+	subbatches: IBatchHTTPRequestForm[][],
+	batches: IBatchHTTPRequestForm[][] = [],
+	batchRequests: Promise<TBatchResponse | null>[] = [];
 
-	console.log("\n\n=======================" +
-	              "\nbatchRequestingQueue()" +
-					  "\n=======================" +
-					  "\nQueued " + allRequestsCopy.length + " requests");
+//	console.log("\n\n=======================" +
+//	              "\nbatchRequestingQueue()" +
+//					  "\n=======================" +
+//					  "\nQueued " + allRequestsCopy.length + " requests");
 	return new Promise((resolve, reject) => {
-		for (let j = 0, i = 0; j < MAX_REQUESTS && i < allRequestsCopy.length; j++, i++)
-			subrequests.push(allRequestsCopy[i]);
-		console.log("Batch of " + subrequests.length + " requests proceeding to network");
-		allRequestsCopy.splice(0, MAX_REQUESTS);
-		singleBatchRequest(elements, subrequests)
-			.then((response: {success: TFetchInfo[], error: TFetchInfo[]} | null) => {
-			if (response != null) {
-				successResponses = successResponses.concat(response.success);
-				errorResponses = errorResponses.concat(response.error);
-			}
-			if (allRequestsCopy.length > 0)
-				batchRequestingQueue(elements, allRequestsCopy);
-				else
-				resolve({
-					success: successResponses,
-					error: errorResponses
-				});
-		}).catch((response) => {
-			errorResponses = errorResponses.concat(response);
-			reject({
-				success: null,
-				error: errorResponses
-			});
+
+	/* CONDITIONS:  Batch must have one protocol/site URL. Maximum of 100 requests in a batch */
+
+	//  sort requests by contextinfo
+		allRequestsCopy.sort((req1, req2) => {
+			return req1.contextinfo > req2.contextinfo ? 1 : req1.contextinfo < req2.contextinfo ? -1 : 0;
 		});
+		batches[0] = [];
+		for (let j = 0, i = 0; i < allRequestsCopy.length; i++) {
+			if (i > 0 && (allRequestsCopy[i - 1].contextinfo !== allRequestsCopy[i].contextinfo)) {
+				batches[j++] = [];
+			}
+			batches[j].push(allRequestsCopy[i]);
+		}
+		for (let batch of batches) {
+			subbatches = [];
+			while (batch.length > 0)
+				subbatches.push(batch.splice(0, MAX_REQUESTS));
+//	console.log("Batch of " + batches.length + " requests proceeding to network");
+		//	allRequestsCopy.splice(0, MAX_REQUESTS);
+			for (let i = 0; i < subbatches.length; i++) {
+				batchRequests.push(new Promise<TBatchResponse | null>((resolve) => {
+					singleBatchRequest(subbatches[i])
+					.then((response: TBatchResponse | null) => {
+//	console.log("Storing success to Promise.all() in batchRequestingQueue():" +
+//	`\n  Successes: ${response ? response.success.length : 'null'}, Errors: ${response ? response.error.length: 'null'}`);
+						resolve(response);
+					}).catch((response: JQueryXHR) => {
+//	console.log("Storing error to Promise.all() in batchRequestingQueue():" +
+//	`\n  caught error but resolving: ${JSON.stringify(response, null, '  ')}`);
+						resolve(response);
+					});
+				}));
+			}
+			Promise.all(batchRequests).then((responses: (TBatchResponse | null)[]) => {
+				let successes: TFetchInfo[] = [],
+					errors: TFetchInfo[] = [];
+				if (responses) {
+					for (let response of responses)
+						if (response) {
+							successes = successes.concat(response.success);
+							errors = errors.concat(response.error);
+						}
+//	console.log("Promise.all() in batchRequestingQueue():" +
+//			`\n  Successes: ${successes.length}, Errors: ${errors.length}`);
+					resolve({success: successes, error: errors});
+				} else {
+//	console.log("Promise.all() in batchRequestingQueue():" +
+//					`\n   responses were null ')}`);
+					resolve(null);
+				}
+			}).catch((response: any) => {
+				reject(response);
+			});
+		}
 	});
 }
 
@@ -227,6 +271,11 @@ function CreateUUID():string {
 		 return v.toString(16);
 	});
 }
+
+/*
+	Format for showing batch requesting shown in comments at bottom of this
+	source file!
+*/
 
 /**
  * @function singleBatchRequest -- used to exploit the $batch OData multiple write request
@@ -247,125 +296,80 @@ function CreateUUID():string {
  *      2. the object {reqObj: AJAX request object, addlMessage: <string> message }
  */
 function singleBatchRequest(
-	elements: IBatchHTTPRequestParams,
 	requests: IBatchHTTPRequestForm[]
-): Promise<{success: TFetchInfo[], error: TFetchInfo[]} | null> {
+): Promise<TBatchResponse | null> {
+	let requestedUrls: string[] = [],
+		multipartBoundary = "batch_" + CreateUUID(),
+		changeSetBoundary = "changeset_" + CreateUUID(),
+		contentPackage: {
+			content: string;
+			RequestDigest: string;
+		} = {
+			content: "",
+			RequestDigest: ""
+		};
+
+/****************************************************
+ * A single batch must have ONE PROTOCOL and ONE SITE URL or it does not get past contextinfo
+ */
 	return new Promise((resolve, reject) => {
-		let multipartBoundary = "batch_" + CreateUUID(),
-				changeSetBoundary = "changeset_" + CreateUUID(),
-				protocol = elements.protocol ?? "https://",
-				requestedUrls: string[] = [],
-				allHeaders = "",
-				body = "",
-				content = "",
-				headerContent = "",
-				currentMethod: THttpRequestMethods | "" = "",
-				previousMethod: THttpRequestMethods | "" = "";
+		let headerAccept: string = "application/json;odata=nometadata",
+			retval: {action: "resolve", value: object} | null,
+			contextinfo = requests[0].contextinfo;
 
-		if (elements.AllHeaders)
-			for (let header in elements.AllHeaders)
-				allHeaders += "\n" + header + ": " + elements.AllHeaders[header];
-// create the body
-		if (protocol.search(/\/\/$/) < 0)
-			protocol += "//";
-		if (elements.host.search(/http/) == 0)
-			protocol = "" as THttpRequestProtocol;
-		for (let request of requests) {
-			currentMethod = request.method ?? elements.AllMethods ?? "GET";
-			// method checking
-			if (currentMethod == "POST" && request.url.search(/\/items\(\d{1,}\)/) >= 0) {
-				resolve({
-					success: [],
-					error: [{
-						RequestedUrl: request.url,
-						Etag: null,
-						ContentType: request.headers ? request.headers!["Content-Type"] as string : null,
-						HttpStatus: 0,
-						Data: "A URL with POST method was found with a GetById() function used. " +
-							"POST methods create items, while PATCH methods are used to update items.",
-						ProcessedData: []
-					}]
-				});
-				return;
-			}if (currentMethod != "GET")
-				body += "\n\n--" + changeSetBoundary;
-			else if (previousMethod.length > 0 && previousMethod != "GET" && currentMethod == "GET")
-				body += "\n\n--" + changeSetBoundary + "--";
-			if (currentMethod == "GET")
-				body += "\n\n--" + multipartBoundary;
+// check contextinfo
 
-			body += "\nContent-Type: application/http";
-			body += "\nContent-Transfer-Encoding: binary";
+		if (requests.every((request) => {
+			return request.contextinfo == contextinfo;
+		}) == false)
+			throw "singleBatchRequest():  all contextinfo values in a single batch must be identical";
 
-			body += "\n\n" + currentMethod + " " + request.url + " HTTP/1.1";
-			requestedUrls.push(request.url);
+		if (requests.every((request) => {
+			return typeof request.method === "undefined" || request.method == "GET";
+		}) == true)
+			onlyGETRequests();
+		else if ((retval = changeSetRequests()) != null)
+			if (retval.action == "resolve")
+				resolve(retval.value as {success: TFetchInfo[], error: TFetchInfo[]} | null);
 
- 			// header part
-			if (request.headers)
-				for (let header in request.headers)
-					headerContent += "\n" + header + ": " + request.headers[header];
-			else
-				headerContent = allHeaders;
-			if (headerContent.search(/Accept:/i) < 0)
-				headerContent += "\nAccept: application/json;odata=nometadata";
-			if (currentMethod == "GET")
-				headerContent = headerContent.replace(/Content\-Type:[^\r\n]+\r?\n?/, "");
-			body += headerContent;
-			if (currentMethod != "GET")
-				body += "\n\n" + JSON.stringify(request.body);
-			previousMethod = currentMethod;
-		}
-		if (currentMethod != "GET")
-			body += "\n\n--" + changeSetBoundary + "--";
-
-		// header
-		content += "\n\n--" + multipartBoundary;
-		content += "\nContent-Type: multipart/mixed; boundary=" + changeSetBoundary;
-		content += "\nContent-Length: " + body.length;
-		content += "\nContent-Transfer-Encoding: binary";
-		content += "\nAccept: application/json;odata=nometadata";
-		content += body;
-		// footer
-		content += "\n\n--" + multipartBoundary + "--";
-
-		$.ajax({
-			url: protocol + elements.host + elements.path + "/_api/contextinfo",
+		$.ajax({  //  gets the digest token
+			url:  contextinfo + "/_api/contextinfo",
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json;odata=verbose",
-				"Accept": "application/json;odata=verbose"
+				"Accept": headerAccept!
 			},
 			success: (data: any) => {
-				console.log("Top level request header:" +
-					"\nPOST " + protocol + elements.host + elements.path + "/_api/$batch");
-				console.log(
-					"X-RequestDigest: " + (data.FormDigestValue ? data.FormDigestValue :
-							data.d.GetContextWebInformation.FormDigestValue));
-				console.log(
-					"Content-Type: multipart/mixed; boundary=" + multipartBoundary +
-					"\nAccept: application/json;odata=verbose");
-					console.log("\n\n\n************* START BODY CONTENT ***************** \n" +
-					content + "\n************** END BODY CONTENT ******************");
+				contentPackage.RequestDigest = data.FormDigestValue ? data.FormDigestValue :
+						data.d.GetContextWebInformation.FormDigestValue;
+//				console.log("\n\n\n************* START BODY CONTENT *****************\n" +
+//					contentPackage.content + "\n\n\n************** END BODY CONTENT ******************");
 				$.ajax({
-					url: protocol + elements.host + elements.path + "/_api/$batch",
+					url: contextinfo + "/_api/$batch",
 					method: "POST",
 					headers: {
-						// element.multipart boundary usually  "batch_" + guid()
-						"X-RequestDigest":  data.FormDigestValue ? data.FormDigestValue :
-										data.d.GetContextWebInformation.FormDigestValue,
+						"X-RequestDigest":  contentPackage.RequestDigest,
 						"Content-Type": "multipart/mixed; boundary=" + multipartBoundary,
 						"Accept": "application/json;odata=verbose"
 					},
-					data: content,
-					success: (data: any) => {
-						splitRequests(data, requestedUrls).
-							then((response: {success: TFetchInfo[], error: TFetchInfo[]} | null) => {
+					data: contentPackage.content,
+					success: (responseData: TSPResponseData, message: string, reqObj: JQueryXHR) => {
+						let batchData: TBatchResponseRaw = {
+							rawData: responseData as unknown as string,
+							ETag: reqObj.getResponseHeader("ETag"),
+							RequestDigest: reqObj.getResponseHeader("X-RequestDigest")
+						};
+						processRawResponses(batchData, requestedUrls).then(
+							(response: TBatchResponse | null) => {
+								resolve(response);
 						}).catch((response: any) => {
 							reject(response);
 						});
 					},
 					// error completing the batch request
 					error: (reqObj: JQueryXHR) => {
+//console.log("singleBatchRequest() error:" +
+//			`\n    tracking: RequestDigest=${reqObj.getResponseHeader("X-RequestDigest")}, ETag=${reqObj.getResponseHeader("ETag")}`);
 						reject(reqObj);
 					}
 				});
@@ -376,80 +380,213 @@ function singleBatchRequest(
 			}
 		});
 	});
+
+	function onlyGETRequests() {
+		let content: string = "";
+
+		for (let request of requests) {
+			content += "\n\n--" + multipartBoundary;
+			content += "\nContent-Type: application/http";
+			content += "\nContent-Transfer-Encoding: binary";
+			content += `\n\nGET ${request.url} HTTP/1.1`;
+			content += "\nAccept: application/json;odata=verbose";
+			requestedUrls.push(request.url);
+		}
+		content += `\n\n--${multipartBoundary}--`;
+		contentPackage.content = content;
+	}
+
+	function changeSetRequests(): null | {action: "resolve", value: object} {
+		let headerContent = "",
+			headerAccept: string,
+			content = "",
+			allHeaders = "",
+			body = "",
+			currentMethod: THttpRequestMethods | "" = "",
+			previousMethod: THttpRequestMethods | "" = "",
+			usedChangeSetBoundary: boolean = false;
+
+		for (let request of requests) {
+			currentMethod = request.method ?? "GET";
+			// method checking
+			if (currentMethod == "POST" && request.url.search(/\/items\(\d{1,}\)/) >= 0)
+				return {
+					action: "resolve",
+					value: ({
+						success: [],
+						error: [{
+							RequestedUrl: request.url,
+							Etag: null,
+							ContentType: request.headers ? request.headers!["Content-Type"] as string : null,
+							HttpStatus: 0,
+							Data: {
+								error:{
+									message: {
+										value: "A URL with POST method was found with a GetById() function used. " +
+										"POST methods create items, while PATCH methods are used to update items."
+									}
+								}
+							},
+							ProcessedData: undefined
+						}]
+					})
+				};
+	// change of method ==> changeset
+			if (currentMethod != "GET") {
+				body += "\n\n--" + changeSetBoundary;
+				usedChangeSetBoundary = true;
+			} else if (previousMethod.length > 0 && previousMethod != "GET" && currentMethod == "GET") {
+				body += "\n\n--" + changeSetBoundary + "--";
+				usedChangeSetBoundary = true;
+			}
+			if (currentMethod == "GET")
+				body += "\n\n--" + multipartBoundary;
+			body += "\nContent-Type: application/http";
+			body += "\nContent-Transfer-Encoding: binary";
+
+			body += "\n\n" + currentMethod + " " + request.url + " HTTP/1.1";
+			requestedUrls.push(request.url);
+
+// header part
+			if (request.headers)
+				for (let header in request.headers)
+					headerContent += "\n" + header + ": " + request.headers[header];
+			else
+				headerContent = allHeaders;
+			if (headerContent.search(/Accept:/i) < 0) {
+				headerAccept = "application/json;odata=nometadata";
+				headerContent = "\nAccept: " + headerAccept;
+			}
+			if (currentMethod == "GET")
+				headerContent = headerContent.replace(/Content\-Type:[^\r\n]+\r?\n?/, "");
+			body += headerContent;
+// added to body, the header content for request
+
+// this adds the actual body part for a non-GET request
+			if (currentMethod != "GET")
+				body += "\n\n" + JSON.stringify(request.body);
+			previousMethod = currentMethod;
+		}
+		if (currentMethod != "GET") {
+			body += "\n\n--" + changeSetBoundary + "--";
+			usedChangeSetBoundary = true;
+		}
+// header + body
+		content += "\n\n--" + multipartBoundary;
+		if (usedChangeSetBoundary == true)
+			content += "\nContent-Type: multipart/mixed; boundary=" + changeSetBoundary;
+		else
+			//content += "\nContent-Type: multipart/mixed; boundary=" + multipartBoundary;
+			content += "\nContent-Type: application/http"
+
+		content += "\nContent-Transfer-Encoding: binary";
+		content += "\nAccept: " + headerAccept!;
+		content += body;
+// footer
+		content += "\n--" + multipartBoundary + "--";
+		contentPackage.content = content;
+		return null;
+	}
 }
 
-function splitRequests(
-	responseSet: string,
+function processRawResponses(
+	responseSet: TBatchResponseRaw,
 	requestedUrls: string[]
-): Promise<{success: TFetchInfo[], error: TFetchInfo[] } | null> {
+): Promise<TBatchResponse | null> {
 	return new Promise((resolve, reject) => {
 		let idx: number,
+			responseIndex: number = 0,
 			httpCode: HttpStatus,
 			urlIndex: number = 0,
-			checkResponse: Promise<any>[] = [],
 			match: RegExpMatchArray | null,
-			fetchInfo: TFetchInfo[] = [],
+			successResponses: TFetchInfo[] = [],
+			parsedData: TSPResponseData,
+			RequestDigest: string | null = (responseSet && responseSet.RequestDigest) ?
+					responseSet.RequestDigest : null,
 			errorResponses: TFetchInfo[] = [],
-			allResponses: RegExpMatchArray | null = responseSet.match(/HTTP\/1.1[^\{]+(\{.*\})/g);
+			allResponses: RegExpMatchArray | null = responseSet.rawData.match(/HTTP\/1.1[^\{]+(\{.*\})/g);
 
-		if (allResponses == null)
+//console.log("SHAREPOINT REST API Batching: splitRequests()");
+		if (allResponses == null) {
+//console.log("  splitRequests() allResponses == null, returning" +
+//			   `\n     tracking: RequestDigest=${responseSet.RequestDigest}, ETag=${responseSet.ETag}`);
 			return resolve(null);
-		for (let response of allResponses!) {
-			if ((httpCode = <HttpStatus>parseInt(response.match(/HTTP\/\d\.\d (\d{3})/)![1])) < 400) {
-				idx = fetchInfo.push({
+		}
+//console.log(`  splitRequests() allResponses: ${allResponses.length} total, against ${requestedUrls.length} requests` +
+//"\n\nordered responses:");
+
+//for (let response of allResponses)
+//console.log(`  response: ${response}`);
+		for (let response of allResponses!)
+			if ((httpCode = <HttpStatus>parseInt(response.match(/HTTP\/\d\.\d (\d{3})/)![1])) < 400)
+				idx = successResponses.push({
+					ResponseIndex: responseIndex++,
 					RequestedUrl: requestedUrls[urlIndex++],
 					HttpStatus: httpCode,
 					ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
 					Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
-					Data: JSON.parse(response.match(/\{.*\}/)![0]),
-					ProcessedData: []
+					RequestDigest: RequestDigest,
+					Data: (parsedData = JSON.parse(response.match(/\{.*\}/)![0])),
+					ProcessedData: [] as unknown as TSPResponseData
 				}) - 1;
-				checkResponse.push(new Promise((resolve, reject) => {
-					collectNext(fetchInfo[idx].Data, []).then((fetched) => {
-						resolve(fetched);
+			else
+				errorResponses.push({
+					ResponseIndex: responseIndex++,
+					RequestedUrl: requestedUrls[urlIndex++],
+					HttpStatus: httpCode,
+					ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
+					Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
+					RequestDigest: RequestDigest,
+					Data: JSON.parse(response.match(/\{.*\}/)![0]),
+					ProcessedData: undefined
+				});
+		let successResponse: TSPResponseData,
+			followupNextRequests: Promise<TSPResponseData>[] = [];
+		for (let response of successResponses) {
+			successResponse = response.Data as TSPResponseData;
+			if (successResponse.d && successResponse.d.__next)
+				followupNextRequests.push(new Promise((reject, resolve) => {
+					collectNext(successResponse).then((response: TSPResponseData) => {
+						resolve(response);
 					}).catch((response) => {
 						reject(response);
 					});
 				}));
-			} else
-				errorResponses.push({
-					RequestedUrl: requestedUrls[urlIndex++],
-					HttpStatus: httpCode,
-					ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
-					Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
-					Data: JSON.parse(response.match(/\{.*\}/)![0]),
-					ProcessedData: []
-				});
 		}
-		Promise.all(checkResponse).then((fetches) => {
+		// check for an collect
+		Promise.all(followupNextRequests).then((fetches: TSPResponseData[]) => {
 			for (idx = 0; idx < fetches.length; idx++)
-				fetchInfo[idx].ProcessedData = fetches[idx];
-				resolve({
-					success: fetchInfo,
-					error: errorResponses
+				successResponses[idx].ProcessedData = fetches[idx];
+			resolve({
+				success: successResponses,
+				error: errorResponses
 			});
-		}).catch((response) => {
+		}).catch((response: any) => {
 			reject(response);
 		});
 	});
 
 	function collectNext(
-		responseObj: any,
-		carryData: any[]
-	): Promise<any> {
+		responseObj: TSPResponseData,
+		carryData?: any[],
+	): Promise<TSPResponseData> {
 		return new Promise((resolve, reject) => {
 			let nextLink: string | null;
 
-			if ((responseObj.d || Array.isArray(responseObj) == false) && !responseObj.value) {
+// conditions where __next is property is not found
+			if (!((responseObj.d && responseObj.d.__next) || responseObj.value || responseObj.__next)) {
 				resolve(responseObj);
 				return;
 			}
-			carryData = carryData.concat(responseObj.value);
+			if (!carryData)
+				carryData = [];
+			else
+				carryData = carryData.concat(responseObj.value);
 			nextLink = responseObj["odata.nextLink"] ||
 					(responseObj["d"] && responseObj["d"]["__next"] ? responseObj["d"]["__next"] : null) ||
 					(responseObj["__next"] ? responseObj["__next"] : null);
 			if (nextLink == null) {
-				resolve(carryData);
+				resolve(carryData as TSPResponseData);
 				return;
 			}
 			$.ajax({
@@ -464,7 +601,7 @@ function splitRequests(
 					if (data["odata.nextLink"])
 						resolve(collectNext(data, carryData));
 					else
-						resolve(carryData.concat(data.value));
+						resolve(carryData!.concat(data.value) as TSPResponseData);
 				},
 				error: (reqObj) => {
 					reject({
@@ -515,25 +652,23 @@ function SPListColumnCopy(
 					body[destColumnIntName] = response[sourceColumnIntName];
 					requests.push({
 						url: siteURL + "/_api/web/lists" + listNameOrGUID + "/items(" + response.ID + ")",
-						body: body
-					});
-				}
-
-				batchRequestingQueue({
-						host: host,
-						path: siteURL.substring(host.length),
-						AllMethods: "PATCH",
-						AllHeaders: {
+						contextinfo: siteURL,
+						body: body,
+						method: "PATCH",
+						headers: {
 							"Content-Type": "application/json;odata=verbose",
 							"Accept": "application/json;odata=nometadata",
 							"IF-MATCH": "*",
 					//		"X-HTTP-METHOD": "MERGE"
 						}
-					},
+					});
+				}
+
+				batchRequestingQueue(
 					requests
-				).then((response) => {
+				).then((response: any) => {
 					resolve(response);
-				}).catch((response) => {
+				}).catch((response: any) => {
 					reject(response);
 				});
 			},
@@ -549,7 +684,8 @@ function SPListColumnCopy(
  * @param {object}  JsonBody -- JS object which conforms to JSON rules. Must be "field_properties" : "field_values" format
  *                    If one of the properties is "__SetType__", it will fix the "__metadata" property
  */
-export function formatRESTBody(JsonBody: { [key: string]: string | object } | string ): string {
+export
+function formatRESTBody(JsonBody: TArrayToJSON ): string {
    let testString: string,
 		testBody: object,
 		temp: any;
@@ -561,8 +697,8 @@ export function formatRESTBody(JsonBody: { [key: string]: string | object } | st
       throw "The argument is not a JavaScript object with quoted properties and quoted values (JSON format)";
    }
 	function processObjectLevel(
-		objPart: { [key: string]: string | object } | string
-	): { [key: string]: string | object } | string {
+		objPart: any
+	): any {
 		let newPart: any = {};
 
 		if (typeof objPart == "string")
@@ -574,7 +710,7 @@ export function formatRESTBody(JsonBody: { [key: string]: string | object } | st
 				if (objPart[property] == null)
 					newPart[property] = "null";
 				else
-					newPart[property] = processObjectLevel(objPart[property] as {[key:string]: string | object});
+				newPart[property] = processObjectLevel(objPart[property]);
 			} else if (objPart[property] instanceof Date == true)
 				newPart[property] = (objPart[property] as Date).toISOString();
          else
@@ -585,19 +721,25 @@ export function formatRESTBody(JsonBody: { [key: string]: string | object } | st
 	return temp;
 }
 
-export function checkEntityTypeProperty(body: object, typeCheck: string) {
+export
+function checkEntityTypeProperty(body: object, typeCheck: string) {
 	let checkRE: RegExp;
 
 	if (typeCheck == "item")
-		checkRE = SPRESTGlobals.ListItemEntityTypeRE;
+		checkRE = //SPRESTGlobals.
+			ListItemEntityTypeRE;
 	else if (typeCheck == "list")
-		checkRE = SPRESTGlobals.ListEntityTypeRE;
+		checkRE = //SPRESTGlobals.
+			ListEntityTypeRE;
 	else if (typeCheck == "field")
-		checkRE = SPRESTGlobals.ListFieldEntityTypeRE;
+		checkRE = //SPRESTGlobals.
+			ListFieldEntityTypeRE;
 	else if (typeCheck == "content type")
-		checkRE = SPRESTGlobals.ContentTypeEntityTypeRE;
+		checkRE = // SPRESTGlobals.
+			ContentTypeEntityTypeRE;
 	else if (typeCheck == "view")
-		checkRE = SPRESTGlobals.ViewEntityTypeRE;
+		checkRE = //SPRESTGlobals.
+			ViewEntityTypeRE;
 	else
 		return false;
 	for (let property in body)
@@ -624,8 +766,9 @@ export function checkEntityTypeProperty(body: object, typeCheck: string) {
 				parsed after the query identifier character '?'
  */
 
-export function ParseSPUrl (url: string): TParsedURL | null {
-	const urlRE = /(https?:\/\/[^\/]+)|(\/[^\/\?]+)/g;
+export
+function ParseSPUrl (url: string): TParsedURL | null {
+	const urlRE = /(https?):\/\/([^\/]+)|(\/[^\/\?]+)/g;
 	let index: number,
 		urlParts: RegExpMatchArray | null,
 		query: URLSearchParams | null = null,
@@ -636,21 +779,38 @@ export function ParseSPUrl (url: string): TParsedURL | null {
 		pathDone: boolean = false,
 		fName: string | null = null,
 		listName: string | null = null,
-		tmpArr: unknown[] = [];
+		tmpArr: unknown[] = [],
+		finalParsedUrl: TParsedURL = {
+			originalUrl: "",
+			protocol: null,
+			server: "",
+			hostname: "",
+			siteFullPath: "",
+			sitePartialPath: "",
+			list: null,
+			listConfirmed: false,
+			libRelativeUrl: null,
+			file: null,
+			query: null
+		};
 
 	if (!url)
-		url = location.href;
+      return null;
 	if (typeof url != "string")
 		throw "parameter 'url' must be of type string and be a valid url";
 	if ((urlParts = url.match(urlRE)) == null)
 		return null;
+  	finalParsedUrl.originalUrl = location.href;
+	finalParsedUrl.protocol = urlParts[0].substring(0, urlParts[0].indexOf("://")) as THttpRequestProtocol;
+   finalParsedUrl.hostname = urlParts[0].substring(urlParts[0].indexOf("://") + 3);
+   finalParsedUrl.server = finalParsedUrl.hostname;
 	if ((index = url.lastIndexOf("?")) >= 0)
 		query = new URLSearchParams(url.substring(index));
 	for (let i = 1; i < urlParts.length; i++)
 		if (urlParts[i] == "/Lists") {
 			listName = urlParts[i + 1].substring(1);
 			pathDone = true;
-			listConfirmed = true;
+			finalParsedUrl.listConfirmed = true;
 			i++;
 		} else if (urlParts[i].search(/^\/SiteAssets/) == 0 ||
 					urlParts[i].search(/^\/SitePages|^\/Pages/) == 0) {  // next url part is .aspx
@@ -674,39 +834,35 @@ export function ParseSPUrl (url: string): TParsedURL | null {
 			else
 				siteFullPath += urlParts[i];
 		}
+   if (fName != null)
+      finalParsedUrl.file = fName;
+   if (libpath != null)
+      finalParsedUrl.libRelativeUrl = libpath;
+	finalParsedUrl.list = listName;
+	finalParsedUrl.listConfirmed = listConfirmed;
 	if (siteFullPath == sitePartialPath)
 		sitePartialPath = null;
-
-	if (query)
+	finalParsedUrl.siteFullPath = siteFullPath;
+   if (sitePartialPath != null)
+	   finalParsedUrl.sitePartialPath = sitePartialPath;
+	if (query) {
 		for (let pair of query.entries())
 			tmpArr.push({key: pair[0], value: pair[1]});
-
-	//if (urlParts[3].charAt(urlParts[3].length - 1) == "/")
-	//	urlParts[3] = urlParts[3].substring(0, urlParts[3].length - 1);
-	return {
-		originalUrl: url,
-		protocol: urlParts[0].substring(0, urlParts[0].lastIndexOf("/") + 1) as THttpRequestProtocol,
-		server: urlParts[0],
-		hostname: urlParts[0].substring(urlParts[0].lastIndexOf("/") + 1),
-		siteFullPath: siteFullPath,
-		sitePartialPath: sitePartialPath as string,
-		list: listName as string,
-		listConfirmed: listConfirmed,
-		libRelativeUrl: libpath as string,
-		file: fName as string,
-		query: tmpArr
-	};
+		finalParsedUrl.query = tmpArr;
+	}
+	return finalParsedUrl;
 }
 
 /**
- *
+ * @function serialSPProcessing --
  * @param {function} opFunction
  * @param {arrayOfObject} dataset -- this must be an array of objects in JSON format that
  * 				represent the body of a POST request to create SP data: fields, items, etc.
  * @returns -- the return operations are to unwind the recursion in the processing
  *           to get to either resolve or reject operations
  */
-export function serialSPProcessing(
+export
+function serialSPProcessing(
 	opFunction: (arg1: any) => Promise<any>,
 	itemset: any[]
 ): Promise<any> {
@@ -719,10 +875,10 @@ export function serialSPProcessing(
 			if ((datum = itemset[index]) == null)
 				resolve(responses);
 			else
-				opFunction(datum).then((response) => {
+				opFunction(datum).then((response: any) => {
 					responses.push(response);
 					iterate(index + 1);
-				}).catch((response) => {
+				}).catch((response: any) => {
 					responses.push(response);
 					iterate(index + 1);
 				});
@@ -731,7 +887,8 @@ export function serialSPProcessing(
 	});
 }
 
-export function constructQueryParameters(parameters: {[key:string]: any | any[] }): string {
+export
+function constructQueryParameters(parameters: {[key:string]: any | any[] }): string {
 	let query: string = "",
 		odataFunctions = ["filter", "select", "expand", "top", "count", "skip"];
 
@@ -764,7 +921,8 @@ export function constructQueryParameters(parameters: {[key:string]: any | any[] 
  *     input: radio, checkbox
  * @returns {primitive data type | array | null} -- usually numeric or string representing choice from radio input object
  */
- export function getCheckedInput(inputObj: HTMLInputElement | RadioNodeList): null | string | string[] {
+ export
+ function getCheckedInput(inputObj: HTMLInputElement | RadioNodeList): null | string | string[] {
 	if ((inputObj as RadioNodeList).length) { // multiple checkbox
 		let checked: string[] = [];
 
@@ -789,18 +947,19 @@ export function constructQueryParameters(parameters: {[key:string]: any | any[] 
 *        radio selection
 & @returns boolean  true if value set/utilized, false otherwise
 */
-export function setCheckedInput(
-	inputObj: HTMLInputElement & RadioNodeList,
+export
+function setCheckedInput(
+	inputObj: HTMLInputElement | RadioNodeList,
 	value: string | string[] | null
 ): boolean {
-	if (inputObj.length && value != null && Array.isArray(value) == true) {  // a checked list
+	if ((inputObj as RadioNodeList).length && value != null && Array.isArray(value) == true) {  // a checked list
 		if (value.length && value.length > 0) {
 			for (let val of value)
-				for (let cbox of inputObj)
+				for (let cbox of inputObj as RadioNodeList)
 					if ((cbox as HTMLInputElement).value == val)
 						(cbox as HTMLInputElement).checked = true;
 		} else
-			for (let cbox of inputObj)
+			for (let cbox of inputObj as RadioNodeList)
 			if ((cbox as HTMLInputElement).value == value) {
 				(cbox as HTMLInputElement).checked = true;
 				return true;
@@ -819,7 +978,8 @@ export function setCheckedInput(
  * @param {string} delimiter [optional] -- character that will delimit the result string; default is '/'
  * @returns {string} -- MM[d]DD[d]YYYY-formatted string.
  */
-export function formatDateToMMDDYYYY(
+export
+function formatDateToMMDDYYYY(
 		dateInput: string,
 		delimiter: string = "/"
 ): string | null {
@@ -835,7 +995,8 @@ export function formatDateToMMDDYYYY(
 }
 
 
-export function fixValueAsDate(date: Date): Date | null {
+//export
+function fixValueAsDate(date: Date): Date | null {
 	let datestring: RegExpMatchArray | null = date.toISOString().match(/(\d{4})\-(\d{2})\-(\d{2})/);
 
 	if (datestring == null)
@@ -847,7 +1008,8 @@ export function fixValueAsDate(date: Date): Date | null {
 // This will parse a delimited string into an array of
 // arrays. The default delimiter is the comma, but this
 // can be overriden in the second argument.
-export function CSVToArray(
+export
+function CSVToArray(
 		strData: string,
 		strDelimiter: string = "," // default delimiter is ','
 ): string[][] {
@@ -936,7 +1098,8 @@ export function CSVToArray(
  * @param {function} onChangeHandler   event handler when onchage occurs
  * @returns {string} DOM id attribute of containing DIV so that it can be removed as DOM node by caller
  */
- export function buildSelectSet(
+ export
+ function buildSelectSet(
 	parentNode: HTMLElement,   // DOM node to append the construct
 	nameOrGuid: string,   // used in tagging
 	options: {
@@ -1269,7 +1432,9 @@ export function CSVToArray(
  * @param {object} obj -- basically any variable that may or may not be iterable
  * @returns boolean - true if iterable, false if not
  */
- export function isIterable(obj: any) {
+
+export
+function isIterable(obj: any) {
 	// checks for null and undefined
 	if (obj == null)
 		 return false;
@@ -1277,14 +1442,16 @@ export function CSVToArray(
  }
 
 // off the Internet
-export function createGuid(){
+export
+function createGuid(){
 	function S4() {
 		return (1 + Math.random() * 0x10000 | 0).toString(16).substring(1);
 	}
 	return (S4() + S4() + "-" + S4() + "-4" + S4().substring(0,3) + "-" + S4() + "-" + S4() + S4() + S4()).toLowerCase();
 }
 
-export function createFileDownload(parameters: {
+export
+function createFileDownload(parameters: {
 	href: string;
 	downloadFileName: string;
 	newTab?: boolean;
@@ -1317,7 +1484,8 @@ export function createFileDownload(parameters: {
  * @param dropDivContainerId -- an outer DIV to contain the drag and drop. Useful to
  *     better decorate the div
  */
-export function openFileUpload(
+export
+function openFileUpload(
 	callback: (fileList: FileList) => void
 ): void {
 	let containerDiv: HTMLDivElement = document.createElement("div"),
@@ -1421,7 +1589,8 @@ function disabledClick(evt: Event) {
 * @returns {object} all the data or error information via callbacks
 */
 
-export function RESTrequest(elements: THttpRequestParams): void {
+export
+function RESTrequest(elements: THttpRequestParams): void {
 	let editedUrl: string = (elements.url.indexOf("http") == 0 ? elements.url :
 			"https://" + elements.url);
 	if (elements.setDigest && elements.setDigest == true) {
@@ -1445,7 +1614,11 @@ export function RESTrequest(elements: THttpRequestParams): void {
 					url: editedUrl,
 					method: elements.method ? elements.method : "GET",
 					headers: headers,
-					data: elements.body || elements.data as string,
+					beforeSend: (xhr) => {
+						if (elements.customHeaders)
+							for (let header in elements.customHeaders)
+								xhr.setRequestHeader(header, elements.customHeaders[header]);
+					},					data: elements.body || elements.data as string,
 					success: function (data: TSPResponseData, status: string, requestObj: JQueryXHR) {
 						elements.successCallback!(data, status, requestObj);
 					},
@@ -1469,6 +1642,11 @@ export function RESTrequest(elements: THttpRequestParams): void {
 			url: editedUrl,
 			method: elements.method,
 			headers: elements.headers,
+			beforeSend: (xhr) => {
+				if (elements.customHeaders)
+					for (let header in elements.customHeaders)
+						xhr.setRequestHeader(header, elements.customHeaders[header]);
+			},
 			data: elements.body || elements.data as string,
 			success: function (data: TSPResponseData, status: string, requestObj: JQueryXHR) {
 				if (data.d && data.d.__next)
@@ -1476,9 +1654,9 @@ export function RESTrequest(elements: THttpRequestParams): void {
 						elements,
 						data.d.__next,
 						data.d.results!
-					).then((response) => {
+					).then((response: any) => {
 						elements.successCallback!(response);
-					}).catch((response) => {
+					}).catch((response: any) => {
 						elements.errorCallback!(response);
 					});
 				else
@@ -1491,7 +1669,8 @@ export function RESTrequest(elements: THttpRequestParams): void {
 	}
 }
 
-export function RequestAgain(
+export
+function RequestAgain(
 		elements: THttpRequestParams,
 		nextUrl: string,
 		aggregateData: TSPResponseDataProperties[]
@@ -1508,9 +1687,9 @@ export function RequestAgain(
 						elements,
 						data.d.__next,
 						aggregateData
-					).then((response) => {
+					).then((response: any) => {
 						resolve(response);
-					}).catch((response) => {
+					}).catch((response: any) => {
 						reject(response);
 					});
 				} else
@@ -1533,7 +1712,8 @@ export function RequestAgain(
  *      first instance (FIRST_ONLY) which is default
  * @returns
  */
- export function findObjectPartByProperty(
+ export
+ function findObjectPartByProperty(
 	obj: any,
 	property: string | number,
 	allInstances: boolean = false
@@ -1605,7 +1785,8 @@ function searchArray(
 }
 
 
-export const
+export
+const
    SPListTemplateTypes = {
       enums: [
          { name: "InvalidType",     typeId: -1 },
@@ -1945,3 +2126,94 @@ SelectAllCheckboxes =
 UnselectAllCheckboxes =
     "data:image/png;base64,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";
 
+
+/*************************************************
+   Formats for Batch Requests
+
+	These examples write to the server.
+
+POST http://{site_url}/_api/$batch
+Content-Type: multipart/mixed; boundary=batch_{batch_GUID}
+Accept: application/json;odata=verbose
+
+--batch_{batch_GUID}
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST {endpoint_url} HTTP/1.1
+Content-Type: application/json;odata=verbose
+Content-Length: {length}
+
+{request_body}
+
+--batch_{batch_GUID}
+Content-Type: application/http
+Content-Transfer-Encoding:binary
+
+POST {endpoint_url} HTTP/1.1
+Content-Type: application/json;odata=verbose
+Content-Length: {length}
+
+{request_body}
+
+--batch_{batch_GUID}--
+
+{site_url}: The URL of the SharePoint site.
+{batch_GUID}: A unique identifier for the batch request.
+     You can generate this using any method you prefer.
+{endpoint_url}: The URL of the REST endpoint for the
+   operation you want to perform.
+{length}: The length of the request body in bytes.
+{request_body}: The body of the request in JSON format.
+
+You can include multiple requests in a single batch request by adding more
+Content-Type and Content-Transfer-Encoding headers, followed by the endpoint
+URL and request body for each additional request.
+
+
+//////////////  Format for three GET requests
+
+POST http://{site_url}/_api/$batch
+Content-Type: multipart/mixed; boundary=batch_{batch_GUID}
+Accept: application/json;odata=verbose
+
+--batch_{batch_GUID}
+Content-Type: application/http
+Content-Transfer-Encoding:binary
+
+GET {endpoint_url_1} HTTP/1.1
+Accept: application/json;odata=verbose
+
+--batch_{batch_GUID}
+Content-Type: application/http
+Content-Transfer-Encoding:binary
+
+GET {endpoint_url_2} HTTP/1.1
+Accept: application/json;odata=verbose
+
+--batch_{batch_GUID}
+Content-Type: application/http
+Content-Transfer-Encoding:binary
+
+GET {endpoint_url_3} HTTP/1.1
+Accept: application/json;odata=verbose
+
+--batch_{batch_GUID}--
+
+In this example, you would replace the following variables:
+
+{site_url}: The URL of the SharePoint site.
+{batch_GUID}: A unique identifier for the batch request.
+{endpoint_url_1}, {endpoint_url_2}, and {endpoint_url_3}: The URLs
+of the REST endpoints for the three GET requests.
+
+Note that each request includes an Accept header that specifies
+the desired response format. In this case, application/json;odata=verbose
+is specified for all three requests, but you can change this to another
+format if you prefer.
+
+Also note that each request is separated by a boundary string
+(--batch_{batch_GUID}). This boundary string should be unique
+and not appear in any of the request URLs or bodies.
+
+*****************************************************/

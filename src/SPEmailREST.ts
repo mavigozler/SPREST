@@ -23,7 +23,7 @@
  *           to be separated by a SEMI-COLON!
  */
 
-import { TSPResponseData } from './SPRESTtypes';
+import { TSPResponseData } from './SPComponentTypes';
 
 interface IEmailHeaders {
 	To: string;
@@ -33,41 +33,42 @@ interface IEmailHeaders {
 	BCC?: string | null;
 	From?: string | null;
 }
-export class SPUtilityEmailService {
-    server: string;
-    site: string;
+export
+class SPUtilityEmailService {
+   server: string;
+   site: string;
 
-    constructor (parameters: {
-        server: string;
-        site: string;
-    }) {
-        this.server = parameters.server;
-        if (this.server.search(/^https?:\/\//) < 0)
-            this.server += "https://" + this.server;
-        this.site = parameters.site;
-    }
+   constructor (parameters: {
+      server: string;
+      site: string;
+   }) {
+      this.server = parameters.server;
+      if (this.server.search(/^https?:\/\//) < 0)
+         this.server += "https://" + this.server;
+      this.site = parameters.site;
+   }
 
-    structureMultipleAddresses (addressList: string): string {
-        let i: number,
-            temp: string[];
+   structureMultipleAddresses (addressList: string): string {
+      let i: number,
+         temp: string[];
 
-        if (!addressList || addressList == null) return "";
-        if (addressList.search(/,/) >= 0) throw "A multiple email address list appears to be comma-separated in a string\n" + "Use a semicolon-separated set of addresses";
-        if (addressList.search(/;/) < 0) return addressList;
-        temp = addressList.split(";");
-        for (i = 0; i < temp.length; i++)
-            if (i == 0) temp[i] = temp[i] + "'";
-            else if (i == temp.length - 1) temp[i] = "'" + temp[i];
-        else temp[i] = "'" + temp[i] + "'";
-        return temp.join(",");
-    };
+      if (!addressList || addressList == null) return "";
+      if (addressList.search(/,/) >= 0) throw "A multiple email address list appears to be comma-separated in a string\n" + "Use a semicolon-separated set of addresses";
+      if (addressList.search(/;/) < 0) return addressList;
+      temp = addressList.split(";");
+      for (i = 0; i < temp.length; i++)
+         if (i == 0) temp[i] = temp[i] + "'";
+         else if (i == temp.length - 1) temp[i] = "'" + temp[i];
+         else temp[i] = "'" + temp[i] + "'";
+      return temp.join(",");
+   };
 
-    /** @method .sendEmail
-     * @param {object} properties should include {From:, To:, CC:, BCC:, Subject:, Body:}
-     */
-    sendEmail (headers: IEmailHeaders) : Promise<any> {
-        return new Promise((resolve, reject) => {
-            let To: string,
+/** @method .sendEmail
+* @param {object} properties should include {From:, To:, CC:, BCC:, Subject:, Body:}
+*/
+   sendEmail (headers: IEmailHeaders) : Promise<TSPResponseData> {
+      return new Promise((resolve, reject) => {
+         let To: string,
             CC: string | null,
             BCC: string | null,
             From: string,
@@ -75,78 +76,78 @@ export class SPUtilityEmailService {
             Body:string,
             uri: string = this.server;
 
-            if (!headers.To)
-                throw "Object arg to SPUtilityEmailService.sendEmail() method must include .To: property";
-            if (!headers.Subject)
-                throw "Object arg to SPUtilityEmailService.sendEmail() method must include defined .Subject: property";
-            if (!headers.Body)
-                throw "Object arg to SPUtilityEmailService.sendEmail() method must include defined .Body: property";
-            window.onerror = null;
-            To = this.structureMultipleAddresses(headers.To);
-            CC = headers.CC ? this.structureMultipleAddresses(headers.CC) : "";
-            BCC = headers.BCC ? this.structureMultipleAddresses(headers.BCC) : "";
-            From = headers.From ? headers.From.replace(/"/g, '\\"') : "";
-            From = From.replace(/'/g, "\\'");
-            To = To.replace(/"/g, '\\"');
-            To = To.replace(/'/g, "\\'");
-            CC = CC.replace(/"/g, '\\"');
-            CC = CC.replace(/'/g, "\\'");
-            BCC = BCC.replace(/"/g, '\\"');
-            BCC = BCC.replace(/'/g, "\\'");
-            Subject = headers.Subject.replace(/"/g, '\\"');
-            Subject = Subject.replace(/'/g, "\\'");
-            Body = headers.Body.replace(/\\/g, "\\\\");
-            Body = Body.replace(/"/g, '\\"');
-            Body = Body.replace(/'/g, "\\'");
-            if (this.site && this.site.length > 0)
-                uri += "/" + this.site;
-            $.ajax({
-                url: "https://" + uri + "/_api/contextinfo",
-                method: "POST",
-                headers: {
-                    "Accept": "application/json;odata=verbose"
-                },
-                contentType: "application/json;odata=verbose",
-                success: (responseJSON: TSPResponseData) => {
-                    let digValue = responseJSON!.d!.GetContextWebInformation!.FormDigestValue;
+         if (!headers.To)
+            reject({status: 0, error: { message: { value:
+               "Object arg to SPUtilityEmailService.sendEmail() method must include .To: property" }}});
+         if (!headers.Subject)
+            reject({status: 0, error: { message: { value:
+               "Object arg to SPUtilityEmailService.sendEmail() method must include defined .Subject: property" }}});
+         if (!headers.Body)
+            reject({status: 0, error: { message: { value:
+            "Object arg to SPUtilityEmailService.sendEmail() method must include defined .Body: property" }}});
+         window.onerror = null;
+         To = this.structureMultipleAddresses(headers.To);
+         CC = headers.CC ? this.structureMultipleAddresses(headers.CC) : "";
+         BCC = headers.BCC ? this.structureMultipleAddresses(headers.BCC) : "";
+         From = headers.From ? headers.From.replace(/"/g, '\\"') : "";
+         From = From.replace(/'/g, "\\'");
+         To = To.replace(/"/g, '\\"');
+         To = To.replace(/'/g, "\\'");
+         CC = CC.replace(/"/g, '\\"');
+         CC = CC.replace(/'/g, "\\'");
+         BCC = BCC.replace(/"/g, '\\"');
+         BCC = BCC.replace(/'/g, "\\'");
+         Subject = headers.Subject.replace(/"/g, '\\"');
+         Subject = Subject.replace(/'/g, "\\'");
+         Body = headers.Body.replace(/\\/g, "\\\\");
+         Body = Body.replace(/"/g, '\\"');
+         Body = Body.replace(/'/g, "\\'");
+         if (this.site && this.site.length > 0)
+            uri = uri + (this.site.charAt(0) == "/" ? "" : "/") + this.site;
+         $.ajax({
+            url: uri + "/_api/contextinfo",
+            method: "POST",
+            headers: {
+               "Accept": "application/json;odata=verbose"
+            },
+            contentType: "application/json;odata=verbose",
+            success: (responseJSON: TSPResponseData) => {
+               let digValue = responseJSON!.d!.GetContextWebInformation!.FormDigestValue;
                         // the actual transmission
 
-                    $.ajax({
-                        url: "https://" + uri + "/_api/SP.Utilities.Utility.SendEmail",
-                        method: "POST",
-                        headers: {
-                            "Accept": "application/json;odata=verbose",
-                            "X-RequestDigest": digValue
-                        },
-                        data: JSON.stringify({ properties : {
-                                __metadata: { type: "SP.Utilities.EmailProperties" },
-                                To: { results : [  To  ] },
-                                CC: { results : [  CC  ] },
-                                BCC: { results : [ BCC ] },
-                                From: From,
-                                Subject: Subject,
-                                Body: Body
-                            }
-                        }),
-                        contentType: "application/json;odata=verbose",
-                        success: (data: TSPResponseData, message: string, reqObj: JQueryXHR) => {
-                            resolve(reqObj.status);
-                            console.log("Email success");
-                        },
-                        error: (reqObj: JQueryXHR) => {
-                            reject(reqObj);
-                            console.log("Email failure: " + "\n  HTTP Status: " + reqObj.status + "\n  Message: " + reqObj.responseJSON.error.message.value);
-                        }
-                    });
-                },
-                error: (responseObj: JQueryXHR) => {
-                    // this = request object
-                    alert("ERROR!\n\n" + "Contact the developer with this error message below\n\nMessage: " +
-                            JSON.stringify(responseObj.responseJSON, null, "  "));
-                }
-            });
-        });
-    }
+               $.ajax({
+                  url: uri + "/_api/SP.Utilities.Utility.SendEmail",
+                  method: "POST",
+                  headers: {
+                     "Accept": "application/json;odata=verbose",
+                     "X-RequestDigest": digValue
+                  },
+                  data: JSON.stringify({
+                     properties : {
+                        __metadata: { type: "SP.Utilities.EmailProperties" },
+                        To: { results : [  To  ] },
+                        CC: { results : [  CC  ] },
+                        BCC: { results : [ BCC ] },
+                        From: From,
+                        Subject: Subject,
+                        Body: Body
+                     }
+                  }),
+                  contentType: "application/json;odata=verbose",
+                  success: (data: TSPResponseData) => {
+                     resolve(data);
+                  },
+                  error: (reqObj: JQueryXHR) => {
+                     reject(reqObj);
+                  }
+               });
+            },
+            error: (reqObj: JQueryXHR) => {
+               reject(reqObj);
+            }
+         });
+      });
+   }
 }
 
 // parameters should be object with following acceptable properties
@@ -159,7 +160,8 @@ export class SPUtilityEmailService {
 //   .To : To addressee; optional if the global constant
 //           DEVELOPER_MAIL_ADDRESS is defined with proper email address
 
-export function emailDeveloper(parameters : {
+export
+function emailDeveloper(parameters : {
     server: string;
     site: string;
     errorObj?: object;
@@ -169,11 +171,11 @@ export function emailDeveloper(parameters : {
     CC?: string | null;
     Cc?: string | null;
     head?: string;
-}): Promise<any> {
+}): Promise<TSPResponseData> {
     return new Promise((resolve, reject) => {
         let emailService: SPUtilityEmailService,
-        bodyStart: string,
-        bodyEnd: string;
+           bodyStart: string,
+           bodyEnd: string;
 
         if (!parameters.server) throw "Cannot emailDeveloper() with having a defined server name";
         emailService = new SPUtilityEmailService({
@@ -190,10 +192,10 @@ export function emailDeveloper(parameters : {
             Subject: parameters.subject,
             Body: bodyStart + parameters.body + bodyEnd,
             CC: parameters.CC ? parameters.CC : (parameters.Cc ? parameters.Cc : null)
-        }).then((response) => {
+        }).then((response: TSPResponseData) => {
             resolve(response);
-        }).catch((response) => {
-            reject(response);
+        }).catch((error: JQueryXHR) => {
+            reject(error);
         });;
     });
 }

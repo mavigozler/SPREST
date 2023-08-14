@@ -3,26 +3,38 @@
 /* jshint -W119, -W069 */
 
 import {
-		THttpRequestHeaders,
-		TSiteInfo,
-		THttpRequestParams,
-		THttpRequestBody,
-		TSPResponseData,
-		THttpRequestParamsWithPromise,
-		TXmlHttpRequestData,
-		TParsedURL,
-		IBatchHTTPRequestForm
-	} from './SPRESTtypes';
+	RequestAgain,
+	constructQueryParameters,
+	formatRESTBody,
+	checkEntityTypeProperty,
+	batchRequestingQueue,
+	ParseSPUrl,
+} from './SPRESTSupportLib';
+
+import {
+	THttpRequestHeaders,
+	TSiteInfo,
+	TSiteQuickInfo,
+	THttpRequestParams,
+	THttpRequestBody,
+	TSPResponseData,
+	THttpRequestParamsWithPromise,
+	TXmlHttpRequestData,
+	TParsedURL,
+	IBatchHTTPRequestForm,
+	TArrayToJSON
+} from './SPComponentTypes';
+
 import { SPListREST } from './SPListREST';
-import * as SPRESTSupportLib from './SPRESTSupportLib';
 
 /**
  * @class SPSiteREST
  */
-export class SPSiteREST {
+export
+class SPSiteREST {
 	server: string;
 	sitePath: string;
-	apiPrefix: string;
+	forApiPrefix: string;
 	id: string = "";
 	serverRelativeUrl: string = "";
 	isHubSite: boolean = Boolean();
@@ -33,6 +45,9 @@ export class SPSiteREST {
 	homePage: string = "";
 	siteLogoUrl: string = "";
 	template: string = "";
+	Title: string = "";
+	Description: string = "";
+	Url: string = "";
 	static stdHeaders: THttpRequestHeaders = {
 		"Accept": "application/json;odata=verbose",
 		"Content-Type": "application/json;odata=verbose"
@@ -68,7 +83,7 @@ export class SPSiteREST {
 		this.sitePath = setup.site;
 		if (setup.site.charAt(0) != "/")
 			this.sitePath = "/" + this.sitePath;
-		this.apiPrefix = this.server + this.sitePath + "/_api";
+		this.forApiPrefix = this.server + this.sitePath;
 	}
 
 	/**
@@ -76,10 +91,10 @@ export class SPSiteREST {
 	 * 	by asynchronous request
 	 * @returns Promise
 	 */
-	init() {
+	init(): Promise<SPSiteREST> {
 		return new Promise((resolve, reject) => {
 			$.ajax({
-				url:  this.apiPrefix + "/site",
+				url:  this.forApiPrefix + "/_api/site",
 				method: "GET",
 				headers: SPSiteREST.stdHeaders,
 				success: (data) => {
@@ -89,7 +104,7 @@ export class SPSiteREST {
 					this.isHubSite = data.IsHubSite;
 					this.webId = this.webGuid = data.Id;
 					$.ajax({
-						url: this.apiPrefix + "/web",
+						url: this.forApiPrefix + "/_api/web",
 						method: "GET",
 						headers: SPSiteREST.stdHeaders,
 						success: (data) => {
@@ -99,7 +114,7 @@ export class SPSiteREST {
 							this.homePage = data.WelcomePage;
 							this.siteLogoUrl = data.SiteLogoUrl;
 							this.template = data.WebTemplate;
-							resolve(true);
+							resolve(this);
 						},
 						error: (reqObj) => {
 							reject(reqObj);
@@ -165,10 +180,11 @@ export class SPSiteREST {
 				data: elements.body ?? elements.data as string,
 				success: function (data: TSPResponseData, status: string, requestObj: JQueryXHR) {
 					if (data.d && data.__next)
-						SPRESTSupportLib.RequestAgain(
+						//SPRESTSupportLib.
+						RequestAgain(
 							elements,
 							data.__next,
-							data.results!
+							data.d.results!
 						).then((response: any) => {
 							elements.successCallback!(response);
 						}).catch((response: any) => {
@@ -208,7 +224,7 @@ export class SPSiteREST {
 	 */
 	getProperties(parameters?: any) {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/site" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.forApiPrefix + "/_api/site" + constructQueryParameters(parameters)
 		});
 	}
 
@@ -218,20 +234,20 @@ export class SPSiteREST {
 
 	getWebProperties(parameters?: any) {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.forApiPrefix + "/_api/web" + constructQueryParameters(parameters)
 		});
 	}
 
 	getEndpoint(endpoint: string) {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + endpoint
+			url: this.forApiPrefix + "/_api/" + endpoint
 		});
 	}
 
-	getSubsites() {
+	getSubsites(): Promise<TSiteInfo[]> {
 		return new Promise((resolve, reject) => {
 			SPSiteREST.httpRequest({
-				url: this.apiPrefix + "/web/webinfos",
+				url: this.forApiPrefix + "/_api/web/webinfos",
 				method: "GET",
 				successCallback: (data: TSPResponseData) => {
 					let sites: TSiteInfo[] = [ ],
@@ -239,10 +255,17 @@ export class SPSiteREST {
 
 					for (let result of results!)
 						sites.push({
-							name: result.Title,
-							serverRelativeUrl: result.ServerRelativeUrl,
-							id: result.OtherId,
-							template: result.WebTemplate
+							Name: result.Title,
+							ServerRelativeUrl: result.ServerRelativeUrl,
+							Id: result.OtherId,
+							Template: result.WebTemplate,
+							Title: result.Title,
+							Url: result.Url,
+							Description: result.Description,
+							Created: result.Created,
+							tsType: "TSiteInfo",
+							siteParent: undefined,
+							forApiPrefix: this.server + result.ServerRelativeUrl
 						});
 					resolve(sites);
 				},
@@ -263,7 +286,7 @@ export class SPSiteREST {
 					resolve(data.ParentWeb);
 				else
 					resolve(null);
-			}).catch((response) => {
+			}).catch((response: any) => {
 				reject(response);
 			});
 		});
@@ -272,55 +295,63 @@ export class SPSiteREST {
 	getSitePedigree(siteUrl: string | null):
 				Promise<{pedigree: TSiteInfo; arrayPedigree: TSiteInfo[]}> {
 		return new Promise((resolve, reject) => {
-			let pedigree: TSiteInfo = {},
+			let pedigree: TSiteInfo = {} as TSiteInfo,
 
-					siteInfo: TSiteInfo = {},
+					siteInfo: TSiteInfo = {} as TSiteInfo,
 					repeatGetParent = (siteInfo: TSiteInfo) => {
-						this.getParentWeb(siteInfo.server! + siteInfo.serverRelativeUrl).then((ParentWeb) => {
+						this.getParentWeb(siteInfo.server! + siteInfo.ServerRelativeUrl).then((ParentWeb) => {
 							if (ParentWeb) {  // != null
-								let siteParent: TSiteInfo = {};
+								let siteParent: TSiteInfo = {} as TSiteInfo;
 								ParentWeb = ParentWeb.data.d;
-								siteParent.name = ParentWeb.Title;
+								siteParent.Title = ParentWeb.Title;
 								siteParent.server = siteInfo.server;
-								siteParent.serverRelativeUrl = ParentWeb.ServerRelativeUrl;
-								siteParent.id = ParentWeb.Id;
-								siteParent.template = ParentWeb.WebTemplate;
+								siteParent.ServerRelativeUrl = ParentWeb.ServerRelativeUrl;
+								siteParent.Id = ParentWeb.Id;
+								siteParent.Template = ParentWeb.WebTemplate;
 								siteInfo.parent = siteParent;
-								siteParent.children = [];
-								siteParent.children.push(siteInfo);
+								siteParent.subsites = [] as TSiteInfo[];
+								siteParent.subsites.push(siteInfo as TSiteInfo);
 								repeatGetParent(siteParent);
 							} else {
-								this.fillOutPedigree(siteInfo).then((response) => {
+								this.fillOutPedigree(siteInfo).then((response: any) => {
 									resolve({pedigree: pedigree, arrayPedigree: this.arrayPedigree});
-								}).catch((response) => {
+								}).catch((response: any) => {
 									reject(response);
 								});;  // use the last site
 							}
-						}).catch((response) => {
+						}).catch((response: any) => {
 							reject(response);
 						});
 					};
 
 			if (!siteUrl) {
 				siteInfo.server = this.server;
-				siteInfo.serverRelativeUrl = this.serverRelativeUrl;
+				siteInfo.ServerRelativeUrl = this.serverRelativeUrl;
 			} else {
-				let parsedUrl: TParsedURL | null = SPRESTSupportLib.ParseSPUrl(siteUrl);
+				let parsedUrl: TParsedURL | null = //SPRESTSupportLib.
+					ParseSPUrl(siteUrl);
 
 				if (parsedUrl == null)
 					throw "Parameter 'siteUrl' was not a parseable SharePoint URL";
 				siteInfo.server = parsedUrl.server;
-				siteInfo.serverRelativeUrl = parsedUrl.siteFullPath;
+				siteInfo.ServerRelativeUrl = parsedUrl.siteFullPath;
 			}
 			pedigree.referenceSite = {
 			 ///pedigree.referenceSite = {
-				name: null,
+				Name: this.Title,
 				server: siteInfo.server,
-				serverRelativeUrl: this.serverRelativeUrl,
-				id: this.id,
-				template: this.template,
+				ServerRelativeUrl: this.serverRelativeUrl,
+				Id: this.id,
+				Template: this.template,
 				parent: null,
-				children: []
+				subsites: [],
+				Title: this.Title,
+				typeInSP: "SUBSITE",
+				tsType: "TSiteInfo",
+				Url: this.Url,
+				Description: this.Description,
+				siteParent: undefined,
+				forApiPrefix: siteInfo.server + this.serverRelativeUrl
 			};
 			this.arrayPedigree = [];
 			this.arrayPedigree.push(pedigree.referenceSite);
@@ -337,42 +368,48 @@ export class SPSiteREST {
 				throw "fillOutPedigree():  parameter 'parentWeb' is not defined";
 			subSite = new SPSiteREST({
 					server: this.server as string,
-					site: parentWeb.serverRelativeUrl as string
+					site: parentWeb.ServerRelativeUrl as string
 				});
 			subSite.init().then(() => {
-				subSite.getSubsites().then((webInfos: any) => {
+				subSite.getSubsites().then((webInfos: TSiteInfo[]) => {
 					if (typeof webInfos == "undefined")
 						reject("Promise.success() returned nothing");
 					else {
-						if (typeof parentWeb.children == "undefined")
-							parentWeb.children = [];
+						if (typeof parentWeb.subsites == "undefined")
+							parentWeb.subsites = [] as TSiteInfo[];
 						if (webInfos.length > 0) {
 							let idx: number,
 									webInfoRequests: Promise<any>[] = [];
 
 							for (let webinfo of webInfos) {
-								idx = parentWeb.children.push({
-									name: webinfo.name,
+								idx = parentWeb.subsites.push({
+									Name: webinfo.Title,
+									Title: webinfo.Title,
 									server: parentWeb.server,
-									serverRelativeUrl: webinfo.serverRelativeUrl,
-									id: webinfo.id,
-									template: webinfo.template,
-									parent: parentWeb,
-									children: []
+									ServerRelativeUrl: webinfo.ServerRelativeUrl,
+									Id: webinfo.Id,
+									Template: webinfo.Template,
+									subsites: [],
+									typeInSP: "SUBSITE",
+									tsType: "TSiteInfo",
+									Url: this.Url,
+									Description: this.Description,
+									siteParent: parentWeb,
+									forApiPrefix: parentWeb.server! + webinfo.ServerRelativeUrl
 								}) - 1;
-								this.arrayPedigree.push(parentWeb.children[idx]);
-								webInfoRequests.push(this.fillOutPedigree(parentWeb.children[idx]));
+								this.arrayPedigree.push((parentWeb.subsites as TSiteInfo[])[idx]);
+								webInfoRequests.push(this.fillOutPedigree((parentWeb.subsites as TSiteInfo[])[idx]));
 							}
 
-							Promise.all(webInfoRequests).then((response) => {
-								resolve(true);
-							}).catch((response) => {
+							Promise.all(webInfoRequests).then((response: TSiteInfo[]) => {
+								resolve(response);
+							}).catch((response: JQueryXHR) => {
 								reject(response);
 							});
 						} else
 							resolve(true);
 					}
-				}).catch((response) => {
+				}).catch((response: any) => {
 					reject(response);
 				});
 			});
@@ -381,19 +418,19 @@ export class SPSiteREST {
 
 	getSiteColumns(parameters: any): Promise<any> {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/fields" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.forApiPrefix + "/_api/web/fields" + constructQueryParameters(parameters)
 		});
 	}
 
 	getSiteContentTypes(parameters: any): Promise<any> {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/ContentTypes" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.forApiPrefix + "/_api/web/ContentTypes" + constructQueryParameters(parameters)
 		});
 	}
 
 	getLists(parameters?: any):Promise<any> {
 		return SPSiteREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists" + SPRESTSupportLib.constructQueryParameters(parameters)
+			url: this.forApiPrefix + "/_api/web/lists" + constructQueryParameters(parameters)
 		});
 	}
 
@@ -402,15 +439,15 @@ export class SPSiteREST {
 	 * @param {*} parameters -- need to control these!
 	 * @returns
 	 */
-	createList(parameters: {body: THttpRequestBody}) {
-		let body: THttpRequestBody | string = parameters.body;
+	createList(parameters: {body: TArrayToJSON}) {
+		let body: TArrayToJSON | string = parameters.body;
 
-		if (SPRESTSupportLib.checkEntityTypeProperty(body, "item") == false)
+		if (checkEntityTypeProperty(body, "item") == false)
 			body["__SetType__"] = "SP.List";
-		body = SPRESTSupportLib.formatRESTBody(body);
+		body = formatRESTBody(body);
 		return SPSiteREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists",
+			url: this.forApiPrefix + "/_api/web/lists",
 			method: "POST",
 			body: body
 		});
@@ -421,15 +458,15 @@ export class SPSiteREST {
 	 * @param {object} parameters -- need a 'Title' parameter
 	 * @returns
 	 */
-	updateListByMerge(parameters: {body: THttpRequestBody, listGuid: string}) {
-		let body: THttpRequestBody | string = parameters.body;
+	updateListByMerge(parameters: {body: TArrayToJSON, listGuid: string}) {
+		let body: TArrayToJSON | string = parameters.body;
 
-		if (SPRESTSupportLib.checkEntityTypeProperty(body, "item") == false)
+		if (checkEntityTypeProperty(body, "item") == false)
 			body["__SetType__"] = "SP.List";
-		body = SPRESTSupportLib.formatRESTBody(body);
+		body = formatRESTBody(body);
 		return SPSiteREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists" +
+			url: this.forApiPrefix + "/_api/web/lists" +
 					"(guid'" + parameters.listGuid + "')", /// this cannot be correct
 			method: "POST",
 			headers: {
@@ -446,7 +483,7 @@ export class SPSiteREST {
 			throw "List deletion requires an 'id' or 'guid' parameter for the list to be deleted.";
 		return SPSiteREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists" +
+			url: this.forApiPrefix + "/_api/web/lists" +
 					"(guid'" + id + "')",
 			method: "POST",
 			headers: {
@@ -487,21 +524,21 @@ export class SPSiteREST {
 					iDestListREST.init().then((response: any) => {
 						this.copyFields(sourceListREST, iDestListREST).then(() => {
 							this.copyFolders(sourceListREST, iDestListREST).then(() => {
-								this.copyFiles(sourceListREST, iDestListREST).then((response) => {
+								this.copyFiles(sourceListREST, iDestListREST).then((response: any) => {
 									resolve(response);
-								}).catch((response) => {
+								}).catch((response: any) => {
 									reject(response);
 								});
-							}).catch((response) => {
+							}).catch((response: any) => {
 								reject(response);
 							});
-						}).catch((response) => {
+						}).catch((response: any) => {
 							reject(response);
 						});
 					}).catch((response: any) => {
 						reject(response);
 					});
-				}).catch((response) => {
+				}).catch((response: any) => {
 					if (response.reqObj.status == 500 &&
 							response.reqObj.responseJSON.error.message.value.search(
 								/list.*already exists.*Please choose another title\./
@@ -510,9 +547,9 @@ export class SPSiteREST {
 								top: itemCopyCount
 							}).then((response: any) => {
 							/*
-								iDestListREST.createListItems(response.data.d.ressults).then((response) => {
+								iDestListREST.createListItems(response.data.d.ressults).then((response: any) => {
 									resolve(response);
-								}).catch((response) => {
+								}).catch((response: any) => {
 									reject(response);
 								}); */
 							}).catch((response: any) => {
@@ -640,8 +677,10 @@ export class SPSiteREST {
 
 				for (let item of folders)
 					requests.push({
-						url: destLib.apiPrefix + "/web/folders",
+						url: destLib.forApiPrefix + "/_api/web/folders",
+						contextinfo: destLib.server + destLib.serverRelativeUrl,
 						method: "POST",
+						headers: SPSiteREST.stdHeaders,
 						body: {
 							"__metadata": {
 							  "type": "SP.Folder"
@@ -649,11 +688,7 @@ export class SPSiteREST {
 							"ServerRelativeUrl": item.serverRelativeUrl
 						 }
 					});
-					SPRESTSupportLib.batchRequestingQueue(
-					{host: destLib.server, path: destLib.site,
-						AllHeaders: SPSiteREST.stdHeaders, AllMethods: "POST"},
-					requests
-				).then((response: any) => {
+					batchRequestingQueue(requests).then((response: any) => {
 					resolve(response);
 				}).catch((response: any) => {
 					reject(response);
@@ -701,9 +736,9 @@ export class SPSiteREST {
 							fileName: parts[2]
 						});
 					}
-				this.workRequests(requests, 0).then((response) => {
+				this.workRequests(requests, 0).then((response: any) => {
 					resolve(true);
-				}).catch((response) => {
+				}).catch((response: any) => {
 					reject(response);
 				});
 			/*
@@ -711,9 +746,9 @@ export class SPSiteREST {
 					for (let field of fieldDefs)
 						body[field.InternalName] = item[field.InternalName];
 					itemMetadata.push({body:body});
-				iDestListREST.createListItems(itemMetadata, true).then((response) => {
+				iDestListREST.createListItems(itemMetadata, true).then((response: any) => {
 					resolve(response);
-				}).catch((response) => {
+				}).catch((response: any) => {
 					reject(response);
 				}); */
 			});
@@ -729,12 +764,12 @@ export class SPSiteREST {
 	}[], index: number): Promise<any> {
 		return new Promise((resolve, reject) => {
 			$.ajax({
-				url: this.apiPrefix + "/web/getFileByServerRelativeUrl('" +
+				url: this.forApiPrefix + "/_api/web/getFileByServerRelativeUrl('" +
 					requests[index].sourceUrl + "')/copyto(strnewurl='" +
 					requests[index].destUrl + "/" +
 					requests[index].fileName + "',boverwrite=false)",
 				method: "POST",
-				success: (data) => {
+				success: () => {
 					if (index + 1 > requests.length)
 						resolve("All successful: Completed " + (index + 1) + " requests");
 					else

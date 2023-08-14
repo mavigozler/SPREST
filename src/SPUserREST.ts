@@ -2,37 +2,26 @@
 
 /*  SP User via REST
 
-How to get the current user:
-	getSharePointCurrentUserInfo().then(function (response) {
-		response is UserInfo object!
-	});
-How to get info on another user by ID:
-	getSharePointUserInfo({
-		userId: <id-value>
-	}).then(function (response) {
-		response is UserInfo object!
-	});
-
-How to get info on another user by name:
-	getSharePointUserInfo({
-		firstName: "firstName",
-		lastName: "lastName"
-	}).then(function (response) {
-		response is UserInfo object!
-	});
-How to get info on all users through siteuserinfolist:
-	getAllSharePointUsersInfo({
-		server: [required]
-		query: [ optional ]
-	}).then(function (response) {
-		response is results array of all users
-	});
-
+1. get instance of SPUserREST()
+	supply the server name, and then the site name.  This will retrieve the users of the site
+2. Use the class methods
+	a) getSharePointCurrentUser()
+	b) getSharePointSiteUser(Id)
+	c) getSharePointSiteUser(LastName)
+	d) getSharePointSiteUser(FirstName, LastName)
+	e) getSharePointSiteUsers(query?: string;)
 */
 
-import { TSPResponseData } from './SPRESTtypes';
-import * as SPRESTGlobals from './SPRESTGlobals.js';
+import {
+	TSPResponseData
+} from './SPComponentTypes';
 
+import {
+	RESTrequest
+} from './SPRESTSupportLib';
+//import * as SPRESTGlobals from './SPRESTGlobals.js';
+
+export
 type TUserSearch = {
 	userId?: number;
 	id?: number;
@@ -40,115 +29,20 @@ type TUserSearch = {
 	lastName?: string;
 };
 
+export
+type UserData = {
+	Email: string;
+	Id: string | number;
+	LoginName?: string;
+	Title?: string;
+	JobTitle?: string;
+	LastName: string;
+	FirstName: string;
+	WorkPhone: string;
+	UserName: string;
+	Created?: Date;
+};
 
-/** @function UserInfo -- class to store user information from the SharePoint system
- *  @param  {object} search
- *       {object} [required] any of the following property combinations will be evaluated
- *          {} - empty object: current user info will be returned
- *                                      {.userId: <valid-numeric-ID-for-user> }  user whose ID is used will have info returned
- *                                      {.lastName: "<last-name>" }   first user with that last name will be returned
- *                                      {.lastName: "<last-name>", .firstName: "<first-name>" }
- *          {.debugging: true...sets for debugger}
- */
-export class UserInfo {
-	search: TUserSearch;
-	userId: number = -1; // numeric SP ID
-	loginName: string = ""; //i:0#.w|domain\\user name
-	title: string = ""; // "<last name>, <first name> <org>
-	emailAddress: string = "";
-	userName: string = "";
-	firstName: string = "";
-	lastName: string = "";
-	workPhone: string = "";
-	created: Date = new Date(0);
-	modified: Date = new Date(0);
-	jobTitle: string = "";
-	dataComplete: boolean = false;
-	//        storeData = storeDataEx.bind(null, this);
-	constructor(search: TUserSearch) {
-		if (!search || typeof search != "object")
-			throw "Input to the constructor must include a search property with defined object: { .search: {...} }";
-		this.search = search;
-		if (search.id)
-			this.search.userId = search.id;
-	}
-
-	populateUserData (userRestReqObj: SPUserREST): Promise<any> {
-		return new Promise((resolve, reject) => {
-			let type: number,
-				args: {
-					userId?: number;
-					lastName?: string;
-					firstName?: string;
-				} = {};
-
-			if (this.search.userId) {
-				type = SPRESTGlobals.requestType.TYPE_ID;
-				args = {
-					userId: this.search.userId
-				};
-			} else if (this.search.lastName)
-			   if (this.search.firstName) {
-					type = SPRESTGlobals.requestType.TYPE_FULL_NAME;
-					args = {
-						lastName: this.search.lastName,
-						firstName: this.search.firstName
-					};
-				} else {
-					type = SPRESTGlobals.requestType.TYPE_LAST_NAME;
-					args = {
-						lastName: this.search.lastName
-					};
-				}
-			else  {
-				type = SPRESTGlobals.requestType.TYPE_CURRENT_USER;
-			}
-			userRestReqObj.requestUserInfo({
-					uiObject: this,
-					type: type,
-					args: args
-			}).then((response) => {
-				resolve(UserInfo.storeData(response.uiObject, response.result));
-			}).catch((response) => {
-				reject(response);
-			});
-		});
-	};
-
-	static storeData(userInfoObj: any, userData: any) {
-		userInfoObj.email = userInfoObj.emailAddress = userData.EMail;
-		userInfoObj.userId = userData.Id;
-		userInfoObj.loginName = userData.Name;
-		userInfoObj.title = userData.Title;
-		userInfoObj.jobTitle = userData.JobTitle;
-		userInfoObj.lastName = userData.LastName;
-		userInfoObj.firstName = userData.FirstName;
-		userInfoObj.workPhone = userData.WorkPhone;
-		userInfoObj.userName = userData.UserName;
-		userInfoObj.created = userData.Created;
-		userInfoObj.modified = userData.Modified;
-		userInfoObj.dataComplete = true;
-		return userInfoObj;
-	}
-	getFullName (): string {
-		return this.firstName + " " + this.lastName;
-	};
-	getLastName (): string {
-		return this.lastName;
-	};
-	getFirstName (): string {
-		return this.firstName;
-	};
-	getUserId (): number {
-		return this.userId;
-	};
-	getUserLoginName (): string {
-		return this.loginName;
-	};
-	getUserEmail (): string {
-		return this.emailAddress;
-	};
-}
 
 /** @function SPUserREST -- class to set up REST interface to get user info on SharePoint server
  *  @param {object} the following properties are defined
@@ -157,191 +51,186 @@ export class UserInfo {
  *        .site {string} [optional]  site within server site collection, empty string is default
  *        .debugging {boolean}  if true, set to debugging
  */
-export class SPUserREST {
+export
+class SPUserREST {
 	server: string;
 	site: string;
-	constructor(parameters: {
-		server: string;
-		site: string;
-	}) {
-		if (!parameters.server)
-			throw "Input to the constructor must include a server property: { .server: <string> }";
-		if (parameters.server.search(/^https?\:\/\/[^\/]+\/?/) != 0)
-			throw "'parameters.server' does not appear to follow the pattern 'http[s]://host.name.com/. It must include protocol & host name";
-		this.server = parameters.server;
-		if (!(this.site = parameters.site))
-			throw "A site path is required in 'parameters.site'";
-		this.site = parameters.site;
-	}
-	/** @method  .requestUserInfo -- class to set up REST interface to get user info on SharePoint server
-	 *  @param {object} has following properties
-	 *                              .uiObject: {UserInfo object} [required] need to associate
-	 *           .type: {numeric} required to be TYPE_ID, TYPE_LAST_NAME, TYPE_FULL_NAME
-	 *           .args: {object} optional. depends on .type setting, properties should be
-	 *                 .id: {numeric} ID of user on SP system
-	 *                 .lastName: {string}  present if TYPE_LAST_NAME or TYPE_FULL_NAME
-	 *                 .firstName: {string}  must be present if TYPE_FULL_NAME
-	 */
-	requestUserInfo (parameters: {
-		uiObject: UserInfo;
-		type: number;
-		args?: {
-			userId?: number;
-			lastName?: string;
-			firstName?: string;
-		}
-	}): Promise<any> {
-		if (parameters.uiObject instanceof UserInfo == false)
-			throw "SPUserREST.requestUserInfo(): missing 'uiObject' parameter or parameter not UserInfo class";
-		return new Promise((resolve, reject) => {
-			if (parameters.type == SPRESTGlobals.requestType.TYPE_CURRENT_USER)
-				this.processRequest({
-					url: this.server + this.site + "/_api/web/currentuser"
-				}).then((response) => {
-					this.processRequest({
-						url: this.server + this.site + "/_api/web/siteuserinfolist/items(" + response.d.Id + ")"
-					}).then((response) => {
-						resolve({
-							uiObject: parameters.uiObject,
-							result: response.d
-						});
-					}).catch((response) => {
-						reject(response);
-					});
-				}).catch((response) => {
-					reject(response);
-				});
-			else if (parameters.type == SPRESTGlobals.requestType.TYPE_ID)
-				this.processRequest({
-					url: this.server + this.site + "/_api/web/siteuserinfolist/items(" + parameters.args!.userId + ")"
-				}).then((response) => {
-					resolve({
-						uiObject: parameters.uiObject,
-						result: response.d
-					});
-				}).catch((response) => {
-					reject(response);
-				});
-			else { // type == TYPE_FULL_NAME or TYPE_LAST_NAME
-				let filter: string = "$filter=lastName eq '" + parameters.args!.lastName + "'";
-				if (parameters.type == SPRESTGlobals.requestType.TYPE_FULL_NAME)
-					filter += " and firstName eq '" + parameters.args!.firstName + "'";
-				this.processRequest({
-					url: this.server + this.site + "/_api/web/siteuserinfolist/items?" + filter
-				}).then((response) => {
-					resolve({
-						uiObject: parameters.uiObject,
-						result: response.d
-					});
-				}).catch((response) => {
-					reject(response);
-				});
-			}
-		});
-	};
+	CollectedResults: any[] = [];
 
-	processRequest (parameters: {
-		url: string;
-		method?: string;
-	}): Promise<any> {
+	constructor(
+		server: string,
+		site: string
+	) {
+		if (!server)
+			throw "Input to the constructor must include a server property: { .server: <string> }";
+		if (server.search(/^https?\:\/\/[^\/]+\/?/) != 0)
+			throw "'parameters.server' does not appear to follow the pattern 'http[s]://host.name.com/. It must include protocol & host name";
+		this.server = server;
+		if (!(this.site = site))
+			throw "A site path is required in 'parameters.site'";
+		this.site = site;
+	}
+
+	requestUserInfo(args: {
+		userId?: number | null,
+		lastName?: string | null,
+		firstName?: string | null
+	}): Promise<{UserInfo: UserData; RawData: TSPResponseData}> {
 		return new Promise((resolve, reject) => {
-			$.ajax({
-				method: parameters.method ? parameters.method : "GET",
-				url: parameters.url,
-				headers: {
-					"Content-Type": "application/json;odata=verbose",
-					"Accept": "application/json;odata=verbose"
+			let user: User = {} as User;
+
+			if (!args.userId || !args.lastName)
+				user = new User(
+					this.server,
+					this.site,
+					{}
+				);
+			else if (args.userId)
+				user = new User(
+					this.server,
+					this.site,
+					{userId: args.userId}
+				);
+			else if (args.lastName)
+				user = new User(
+					this.server,
+					this.site,
+					{lastName: args.lastName, firstName: args.firstName ? args.firstName : undefined}
+				);
+			user.getUserData().then((response: {userInfo: UserData, rawData: TSPResponseData}) => {
+				resolve({UserInfo: response.userInfo, RawData: response.rawData});
+			}).catch((response: JQueryXHR) => {
+				reject(response);
+			});
+		});
+	}
+
+	getSharePointCurrentUserInfo(): Promise<{UserInfo: UserData; RawData: TSPResponseData}> {
+		return this.requestUserInfo({});
+	}
+
+	getSharePointUserInfoByLastName(lastName: string): Promise<{UserInfo: UserData; RawData: TSPResponseData}> {
+		return this.requestUserInfo({lastName: lastName});
+	}
+	getSharePointUserInfoByUserId(userId: number): Promise<{UserInfo: UserData; RawData: TSPResponseData}> {
+		return this.requestUserInfo({userId: userId});
+	}
+	getSharePointUserInfoByFullName(firstName: string, lastName: string): Promise<{UserInfo: UserData; RawData: TSPResponseData}> {
+		return this.requestUserInfo({lastName: lastName, firstName: firstName});
+	}
+
+	getAllSharePointUsersInfo(query?: string): Promise<TSPResponseData[]> {
+		return new Promise((resolve, reject) => {
+			RESTrequest({
+				url: `https://${this.server}${this.site}/_api/web/siteuserinfolist/items` + query ? "?" + query : "",
+				method: "GET",
+				successCallback: (data: TSPResponseData/*, text, reqObj */) => {
+					if (!this.CollectedResults)
+						this.CollectedResults = data.d!.results as any[];
+					else
+						this.CollectedResults = this.CollectedResults.concat(data.d!.results);
+					if (data.d!.__next)
+						resolve(this.getAllSharePointUsersInfo(data.d!.__next));
+					else
+						resolve(data.d!.results!);
 				},
-				success: (data) => {
-					resolve(data);
+				errorCallback: (reqObj/*, status, errThrown */) => {
+					reject(reqObj);
+				}
+			});
+		});
+	}
+}
+
+class User {
+	server: string;
+	site: string;
+	search: TUserSearch;
+
+	Email: string = "";
+	Id: number = -1;
+	LoginName: string = "";
+	Title: string = "";
+	JobTitle: string = "";
+	LastName: string = "";
+	FirstName: string = "";
+	WorkPhone: string = "";
+	UserName: string = "";
+	Created: Date = new Date(0);
+
+	RawUserData: TSPResponseData | null = null;
+	//        storeData = storeDataEx.bind(null, this);
+	constructor(
+		server: string,
+		site: string,
+		search: TUserSearch
+	) {
+		this.server = server;
+		this.site = site;
+		this.search = search;
+		if (search.id)
+			this.search.userId = search.id;
+	}
+
+	getUserData(): Promise<{userInfo: UserData, rawData: TSPResponseData}> {
+		return new Promise((resolve, reject) => {
+			let url: string;
+
+			if (this.search.userId)
+				url = `${this.server}${this.site}/_api/web/siteuserinfolist/items(${this.search.userId})`;
+			else if (this.search.lastName) {
+				url = `${this.server}${this.site}/_api/web/siteuserinfolist/items?$filter=lastNName eq ${this.search.lastName}`;
+				if (this.search.firstName)
+					url += ` and firstName eq ${this.search.firstName}`;
+			} else
+				url = `${this.server}${this.site}/_api/web/currentuser`;
+			RESTrequest({
+				url: url,
+				method: "GET",
+				successCallback: (data: TSPResponseData/*, text, reqObj */) => {
+					let userData: UserData = data.d as UserData;
+
+					this.storeData(userData);
+					resolve({userInfo: this, rawData: data.d as TSPResponseData})
 				},
-				error: (reqObj) => {
+				errorCallback: (reqObj/*, status, errThrown */) => {
 					reject(reqObj);
 				}
 			});
 		});
 	};
+
+	storeData(userData: UserData) {
+		this.Email = userData.Email;
+		this.Id = userData.Id as number;
+		this.LoginName = userData.LoginName!;
+		this.Title = userData.Title as string;
+		this.JobTitle = userData.JobTitle as string;
+		this.LastName = userData.LastName;
+		this.FirstName = userData.FirstName;
+		this.WorkPhone = userData.WorkPhone;
+		this.UserName = userData.UserName;
+		this.Created = userData.Created as Date;
+	}
+
+	getFullName (): string {
+		return this.FirstName + " " + this.LastName;
+	};
+	getLastName (): string {
+		return this.LastName;
+	};
+	getFirstName (): string {
+		return this.FirstName;
+	};
+	getUserId (): number {
+		return this.Id;
+	};
+	getUserLoginName (): string {
+		return this.LoginName;
+	};
+	getUserEmail (): string {
+		return this.Email;
+	};
 }
 
-export function getSharePointCurrentUserInfo(parameters: {
-	server: string;
-	site: string;
-}): Promise<any> {
-	return new Promise((resolve, reject) => {
-		let iUserRequest = new SPUserREST({
-				server: parameters.server,
-				site: parameters.site
-			}),
-			uInfo = new UserInfo({});
-		uInfo.populateUserData(iUserRequest).then((response) => {
-			resolve(response);
-		}).catch((response) => {
-			reject(response);
-		});
-	});
-}
 
-export function getSharePointUserInfo(parameters: {
-	server: string;
-	site: string;
-	userId: number;
-	firstName: string;
-	lastName: string;
-}): Promise<any> {
-	return new Promise((resolve, reject) => {
-		let uInfo, iUserRequest = new SPUserREST({
-				server: parameters.server,
-				site: parameters.site
-			});
-		if (parameters.userId)
-			uInfo = new UserInfo({
-				userId: parameters.userId
-			});
-		else
-			uInfo = new UserInfo({
-				firstName: parameters.firstName,
-				lastName: parameters.lastName
-			});
-		uInfo.populateUserData(iUserRequest).then((response) => {
-			resolve(response);
-		}).catch((response) => {
-			reject(response);
-		});
-	});
-}
-
-let CollectedResults: any[];
-function getAllSharePointUsersInfo(parameters: {
-	url?: string;
-	server?: string;
-	site?: string;
-	query?: string;
-}) {
-	return new Promise((resolve, reject) => {
-		$.ajax({
-			method: "GET",
-			url: parameters.url ? parameters.url : "https://" + parameters.server + parameters.site +
-					"/_api/web/siteuserinfolist/items" +
-					(parameters.query ? "?" + parameters.query : ""),
-			headers: {
-				"Content-Type": "application/json;odata=verbose",
-				"Accept": "application/json;odata=verbose"
-			},
-			success: (data: TSPResponseData) => {
-				if (!CollectedResults)
-					CollectedResults = data.d!.results as any[];
-				else
-					CollectedResults = CollectedResults.concat(data.d!.results);
-				if (data.d!.__next)
-					resolve(getAllSharePointUsersInfo({
-						url: data.d!.__next
-					}));
-				else
-					resolve(data.d!.results);
-			},
-			error: (reqObj, responseStatus, responseMessage) => {
-				reject(reqObj);
-			}
-		});
-	});
-}

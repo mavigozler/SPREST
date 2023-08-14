@@ -6,16 +6,17 @@ import {
 		TSPResponseData,
 		THttpRequestParamsWithPromise,
 		TXmlHttpRequestData
-	} from './SPRESTtypes';
-import {
-		RequestAgain
-	} from './SPRESTSupportLib';
+} from './SPComponentTypes';
 
+import {
+	RequestAgain
+} from './SPRESTSupportLib';
 /**
  *
  * @class  representing parameters to establish interface with a site
  *             {server: name of location.host, site: path to site}
  */
+export
 class SPSearchREST {
 	server: string;
 	apiPrefix: string;
@@ -79,10 +80,10 @@ class SPSearchREST {
 				data: elements.body ?? elements.data as string,
 				success: (data: TSPResponseData, status: string, requestObj: JQueryXHR) => {
 					if (data.d && data.__next)
-					RequestAgain(
+						RequestAgain(
 							elements,
 							data.__next,
-							data.results!
+							data.d.results!
 						).then((response: any) => {
 							elements.successCallback!(response);
 						}).catch((response: any) => {
