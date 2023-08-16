@@ -1,12 +1,11 @@
 "use strict";
 
-/*
 enum UserRequestType {
    TYPE_CURRENT_USER,
    TYPE_USER_ID,
    TYPE_LAST_NAME,
    TYPE_FULL_NAME
-}; */
+};
 
 // use as a bit flag
 enum PrincipalTypeGroups {
