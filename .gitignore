@@ -1,6 +1,5 @@
 **/*.js
 **/*.js.map
-**/*.d.ts
 dist/
 run/
 **/*.log
