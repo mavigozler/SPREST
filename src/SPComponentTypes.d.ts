@@ -6,6 +6,35 @@ import {
 	SpGroupType
 } from './SPRESTGlobals';
 
+interface ISPBaseListFieldProperties {
+	__metadata: { type: string; }
+	Id: number;
+	InternalName: string;
+	Description: string;
+	DefaultValue: string;
+	Title: string;
+	FromBaseType: boolean;
+	CanBeDeleted: boolean;
+	Required: boolean;
+	FieldTypeKind: number;
+	TypeAsString: string;
+	Hidden: boolean;
+	Choices?: {
+		__metadata: {
+			type: string;
+		}
+	}
+}
+
+interface ISPBaseListItemProperties {
+	__metadata: { type: string; }
+	Id: number;
+	InternalName: string;
+	File: { Name: string; }
+	Title: string;
+}
+
+
 // defined by JQuery AJAX
 type TJQueryPlainObject = {[key:string]: [] | typeof document | string };
 type TXmlHttpRequestData =  [] | string | TJQueryPlainObject | Uint8Array;
@@ -23,7 +52,7 @@ type TSPResponseDataProperties = {
 export
 type TSPResponseData = {
 	d?: {
-		results?: any[],
+		results?: TSPResponseDataProperties[],
 		GetContextWebInformation?: {
 			FormDigestValue: string;
 		}
@@ -63,7 +92,7 @@ type TIntervalControl = {
 	nextCount?: number;      // keeps track of next count
 	interval: number;       // the number of results returned for each interval
 	callback: (count: number) => void;  // function to call when a certain count of results are returned in request
-};
+} | null;
 
 type THttpRequestParams = {
 	url: string;
@@ -125,6 +154,14 @@ export
 type TArrayToJSON = Record<string, string | boolean | object>
 
 type TQueryProperties = "Expand" | "Filter" | "Select" | "expand" | "filter" | "select";
+
+interface IBatchHTTPRequestParams {
+	host: string;
+	path: string;
+	protocol?: THttpRequestProtocol;
+	AllHeaders?: THttpRequestHeaders;
+	AllMethods?: THttpRequestMethods;
+}
 
 interface IBatchHTTPRequestForm {
 	url: string;
@@ -402,6 +439,19 @@ type TLookupFieldInfo = {
 		value: string;
 	}[] | null;
 };
+
+type TSpSiteInfo = {
+	name:string;
+	serverRelativeUrl:string;
+	id:string;
+	template:string
+};
+
+
+
+
+
+
 
 interface ISPBaseListFieldProperties {
 	__metadata: { type: string; }
