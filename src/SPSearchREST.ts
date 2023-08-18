@@ -71,7 +71,7 @@ class SPSearchREST {
 					RequestAgain(
 							elements,
 							data.__next,
-							data.results!
+							data.d.results!
 						).then((response: any) => {
 							elements.successCallback!(response);
 						}).catch((response: any) => {

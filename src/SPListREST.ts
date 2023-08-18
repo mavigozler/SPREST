@@ -23,7 +23,7 @@ class SPListREST {
 	protocol: string;
 	server: string;
 	site: string;
-	apiPrefix: string;
+	forApiPrefix: string;
 	listName: string = "";
 	listGuid: string = "";
 	baseUrl: string = "";
@@ -43,7 +43,7 @@ class SPListREST {
 	linkToDocumentContentTypeId: string = "";
 	currentListIdIndex: number = -1;
 	setup: TListSetup;
-	sitePedigree: TSiteInfo = {};
+	sitePedigree: TSiteInfo = {} as TSiteInfo;
 	arrayPedigree: TSiteInfo[] = [];
 
 	static stdHeaders: THttpRequestHeaders = {
@@ -90,7 +90,7 @@ class SPListREST {
 		if (!(this.listName || this.listGuid))
 			throw "Neither a list name or list GUID were provided to identify a list";
 		this.setup = setup;
-		this.apiPrefix = this.protocol + this.server + this.site + "/_api";
+		this.forApiPrefix = this.protocol + this.server + this.site + "/_api";
 /*
 		if (setup.linkToDocumentContentTypeId)
 			this.linkToDocumentContentTypeId = setup.linkToDocumentContentTypeId; */
@@ -107,7 +107,7 @@ class SPListREST {
 	init() {
 		return new Promise((resolve, reject) => {
 			$.ajax({
-				url:  this.apiPrefix + "/web/lists" +
+				url:  this.forApiPrefix + "/web/lists" +
 					(this.listName ? "/getByTitle('" + this.listName + "')" :
 					"(guid'" + this.listGuid + "')") +
 					"?$expand=RootFolder,ContentTypes,Fields" +
@@ -260,14 +260,14 @@ class SPListREST {
 	}): Promise<any> {
 		return new Promise((resolve, reject) => {
 			if (parameters.useFunction == "siteREST") {
-				let site: TSiteInfo = {},
+				let site: TSiteInfo = {} as TSiteInfo,
 					lookupListId = parameters.LookupList.replace(/[{}]/g, "");
 
 				for (site of this.arrayPedigree)
-					if (site.id == parameters.LookupWebId)
+					if (site.Id == parameters.LookupWebId)
 						break;
 				SPListREST.httpRequestPromise({
-					url: this.protocol + this.server + site.serverRelativeUrl + "/_api/lists(guid'" +
+					url: this.protocol + this.server + site.ServerRelativeUrl + "/_api/lists(guid'" +
 							lookupListId + "')/items?$select=Id," + parameters.LookupField,
 					ignore: [ 404 ]
 				}).then((response) => {
@@ -279,7 +279,7 @@ class SPListREST {
 			} else if (parameters.useFunction == "SPSearch") // no useFunction specified
 				$.ajax({  // use SharePoint's search query tool
 					// search for the web id
-					url: this.apiPrefix + "/search/query?querytext=guid'" + parameters.LookupWebId + "'",
+					url: this.forApiPrefix + "/search/query?querytext=guid'" + parameters.LookupWebId + "'",
 					method: "GET",
 					headers: SPListREST.stdHeaders,
 					success: (data) => {
@@ -546,7 +546,7 @@ class SPListREST {
 							if (elements.ignore)
 								for (let i = 0; i < elements.ignore.length; i++)
 									if (elements.ignore[i] == requestObj.status)
-										elements.successCallback({results: []}, status, requestObj);
+										elements.successCallback({results: []} as TSPResponseData, status, requestObj);
 							elements.errorCallback!(requestObj, status, thrownErr);
 						}
 					});
@@ -584,7 +584,7 @@ class SPListREST {
 						for (let i = 0; i < elements.ignore.length; i++)
 							if (elements.ignore[i] == requestObj.status) {
 								ignored = true;
-								elements.successCallback({results: []}, status, requestObj);
+								elements.successCallback({results: []}  as TSPResponseData, status, requestObj);
 							}
 					if (ignored == false)
 						elements.errorCallback!(requestObj, status, thrownErr);
@@ -658,7 +658,7 @@ class SPListREST {
 			let query: string = constructQueryParameters(parameters);
 
 			SPListREST.httpRequestPromise({
-				url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')" + query,
+				url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')" + query,
 				method: "GET",
 			}).then((response) => {
 				resolve(response);
@@ -747,7 +747,7 @@ class SPListREST {
 				else
 					query = "?filter=" + filter;
 			SPListREST.httpRequestPromise({
-				url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/items" +
+				url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/items" +
 						(parameters && parameters.itemId > 0 ? "(" + parameters.itemId + ")" : "") + query,
 				progressReport: parameters.progressReport
 			}).then((response: any) => {
@@ -811,7 +811,7 @@ class SPListREST {
 		body = formatRESTBody(body);
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
+			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid +
 					"')/items",
 			method: "POST",
 			body: body
@@ -830,8 +830,9 @@ class SPListREST {
 			// need to re-configure
 			for (let item of items)
 				requests.push({
-					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/items",
-					body: item.body
+					url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/items",
+					body: item.body,
+					contextinfo: "" // what did I add by this?
 				});
 			return batchRequestingQueue({
 				host: this.server,
@@ -870,7 +871,7 @@ class SPListREST {
 				body = formatRESTBody(body);
 				SPListREST.httpRequestPromise({
 					setDigest: true,
-					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
+					url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid +
 								"')/items(" + parameters.itemId + ")",
 					method: "POST",
 					headers: {
@@ -891,13 +892,13 @@ class SPListREST {
 
 	updateListItems(itemsArray: any[], useBatch: boolean) {
 		if (useBatch == true) {
-			let requests: {url: string; body: object}[] = [];
+			let requests: IBatchHTTPRequestForm[] = [];
 			// need to re-configure
 			for (let item of itemsArray)
 				requests.push({
-					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/items(" +
-							item.id + ")",
-					body: item.body
+					url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/items(" + item.id + ")",
+					body: item.body,
+					contextinfo: "" // I need to do somethng with this
 				});
 			return batchRequestingQueue({
 				host: this.server,
@@ -932,7 +933,7 @@ class SPListREST {
 			throw "Parameter 'recycle' is required. If 'true', item goes to recycle bin. " +
 					"If 'false', item is permanently deleted.";
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists" +
+			url: this.forApiPrefix + "/web/lists" +
 					(this.listName ?
 						"/GetByTitle('" + this.listName + "')" :
 						"(guid'" + this.listGuid + "')") +
@@ -949,7 +950,7 @@ class SPListREST {
 				resolve(this.itemCount);
 			else
 				SPListREST.httpRequest({
-					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')",
+					url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')",
 					successCallback: (data: TSPResponseData) => {
 						resolve(data.d!.ItemCount);
 					},
@@ -1059,7 +1060,7 @@ class SPListREST {
 	// ==============================================================================================
 	getAllDocLibFiles(): Promise<any> {
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/Files",
+			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/Files",
 			method: "GET",
 		});
 	}
@@ -1069,7 +1070,7 @@ class SPListREST {
 	}): Promise<any> {
 		let query: string = constructQueryParameters(parameters);
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix +	"/web/getFolderByServerRelativeUrl('" + this.baseUrl +
+			url: this.forApiPrefix +	"/web/getFolderByServerRelativeUrl('" + this.baseUrl +
 						parameters.folderPath + "')/Files" + query,
 			method: "GET"
 		});
@@ -1085,7 +1086,7 @@ class SPListREST {
 			throw "Method requires 'parameters.fileName' or 'parameters.itemName' " +
 				"to be defined";
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/getFolderByServerRelativeUrl('" +
+			url: this.forApiPrefix + "/web/getFolderByServerRelativeUrl('" +
 						this.baseUrl + "')/Files('" + SPListREST.escapeApostrophe(parameters.fileName!) +
 				"')?$expand=ListItemAllFields",
 			method: "GET"
@@ -1101,7 +1102,7 @@ class SPListREST {
 		if (!parameters.itemId)
 			throw "Method requires 'parameters.itemId' to be defined";
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
+			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid +
 						"')/items(" + parameters.itemId + ")",
 		});
 	}
@@ -1115,7 +1116,7 @@ class SPListREST {
 		if (!parameters.itemId)
 			throw "Method requires 'parameters.itemId' to be defined";
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
+			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid +
 					"')/items(" + parameters.itemId + ")/File?$expand=ListItemAllFields",
 		});
 	}
@@ -1142,7 +1143,7 @@ class SPListREST {
 			parameters.willOverwrite = false;
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/getFolderByServerRelativeUrl('" + path + "')" +
+			url: this.forApiPrefix + "/web/getFolderByServerRelativeUrl('" + path + "')" +
 					"/Files/add(url='" + SPListREST.escapeApostrophe(parameters.fileName) +
 					"',overwrite=" + (parameters.willOverwrite == true ? "true" : "false") +
 					")?$expand=ListItemAllFields",
@@ -1154,7 +1155,7 @@ class SPListREST {
 	createFolder(parameters: {folderName: string}): Promise<any> {
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/folders",
+			url: this.forApiPrefix + "/web/folders",
 			method: "POST",
 			body: JSON.stringify({
 				"__metadata": {
@@ -1205,7 +1206,7 @@ class SPListREST {
 			parameters.willOverwrite = (parameters.willOverwrite == true ? "true" : "false");
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/getFolderByServerRelativeUrl('" +
+			url: this.forApiPrefix + "/web/getFolderByServerRelativeUrl('" +
 						this.baseUrl + "')/Files/add(url='" + SPListREST.escapeApostrophe(
 						parameters.fileName) + "',overwrite=" + parameters.willOverwrite +
 						")?$expand=ListItemAllFields",
@@ -1248,7 +1249,7 @@ class SPListREST {
 		path += "/" + parameters.fileName;
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/getFileByServerRelativeUrl('" + path + "')/CheckOut()",
+			url: this.forApiPrefix + "/web/getFileByServerRelativeUrl('" + path + "')/CheckOut()",
 			method: "POST"
 		});
 	}
@@ -1270,7 +1271,7 @@ class SPListREST {
 		checkInComment?: string
 	}): Promise<any> {
 		// checkintype = 0: minor version, = 1: major version, = 2: overwrite
-		let requests: {url:string;body?:{}}[] = [],
+		let requests: IBatchHTTPRequestForm[] = [],
 			checkinType: number;
 		if (!parameters.itemNames || parameters.itemNames.length == 0)
 			throw "Method requires 'parameters.itemNames' as non-zero length arrays of strings";
@@ -1295,8 +1296,9 @@ class SPListREST {
 			parameters.checkInComment = "";
 		for (let itemName of parameters.itemNames)
 			requests.push({
-				url: this.apiPrefix + "/web/GetFileByServerRelativeUrl('" + itemName +
-						"')/CheckIn(comment='" + parameters.checkInComment + "',checkintype=" + checkinType + ")"
+				url: this.forApiPrefix + "/web/GetFileByServerRelativeUrl('" + itemName +
+						"')/CheckIn(comment='" + parameters.checkInComment + "',checkintype=" + checkinType + ")",
+				contextinfo: "" // this is a new parameter, fix it
 			});
 		return batchRequestingQueue({
 			AllMethods: "POST"
@@ -1323,7 +1325,7 @@ class SPListREST {
 		path += "/" + parameters.file;
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/GetFileByServerRelativeUrl('" + path + "')" +
+			url: this.forApiPrefix + "/web/GetFileByServerRelativeUrl('" + path + "')" +
 					"/UndoCheckout()",
 			method: "POST"
 		});
@@ -1341,7 +1343,7 @@ class SPListREST {
 	}): Promise<any> {
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
+			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid +
 					"')/items(" + parameters.itemId + ")",
 			method: "POST",
 			headers: {
@@ -1364,7 +1366,7 @@ class SPListREST {
 	}): Promise<any> {
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')" +
+			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')" +
 					"/items(" + parameters.itemId + ")",
 			method: "POST",
 			headers: {
@@ -1434,7 +1436,7 @@ class SPListREST {
 			}).then(() => {
 				SPListREST.httpRequestPromise({
 					setDigest: true,
-					url: thisInstance.apiPrefix + "/web/lists(guid'" + thisInstance.listGuid +
+					url: thisInstance.forApiPrefix + "/web/lists(guid'" + thisInstance.listGuid +
 							"')/items(" + parameters.itemId + ")",
 					method: "POST",
 					body: "{ '__metadata': { 'type': '" +
@@ -1523,13 +1525,13 @@ class SPListREST {
 		if (typeof parameters.willOverwrite == "undefined")
 			parameters.willOverwrite = "false";
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/GetFileByServerRelativeUrl('" +
+			url: this.forApiPrefix + "/web/GetFileByServerRelativeUrl('" +
 					parameters.sourceFileName + "')?$expand=ListItemAllFields",
 			method: "GET"
 		}).then((response: any) => {
 			uniqueId = response.responseJSON.d.UniqueId;
 			SPListREST.httpRequestPromise({
-				url: this.apiPrefix + "/web/GetFileById(guid'" + uniqueId +
+				url: this.forApiPrefix + "/web/GetFileById(guid'" + uniqueId +
 						"')/CopyTo(strNewUrl='" + parameters.destinationFileName +
 						"',bOverWrite=" + parameters.willOverwrite + ")",
 				method: "POST"
@@ -1558,7 +1560,7 @@ class SPListREST {
 			parameters.includeBaseUrl = true;
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/GetFileByServerRelativeUrl('" +
+			url: this.forApiPrefix + "/web/GetFileByServerRelativeUrl('" +
 				(parameters.includeBaseUrl == false ? "" : this.baseUrl) + parameters.path + "')" +
 				((parameters.recycle && parameters.recycle == false as boolean) ? "" : "/recycle()"),
 			method: "POST"
@@ -1604,7 +1606,7 @@ class SPListREST {
 		}
 	//	query = constructQueryParameters(parameters);
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields" + query
+			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields" + query
 		});
 	}
 
@@ -1636,7 +1638,7 @@ class SPListREST {
 		body = formatRESTBody(body);
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields",
+			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields",
 			method: "POST",
 			body: body
 		});
@@ -1661,9 +1663,10 @@ class SPListREST {
 				if (checkEntityTypeProperty(body, "field") == false)
 					body.__SetType__ = "SP.Field";
 				requests.push({
-					url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields",
+					url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields",
 					method: "POST",
-					body: JSON.parse(formatRESTBody(body))
+					body: JSON.parse(formatRESTBody(body)),
+					contextinfo: "" // something to fix
 				});
 			}
 			batchRequestingQueue({
@@ -1705,7 +1708,7 @@ class SPListREST {
 			body["__SetType__"] = "SP.Field";
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid +
+			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid +
 					"')/fields/GetByTitle('" + parameters.currentName + "')",
 			method: "POST",
 			headers: {
@@ -1735,7 +1738,7 @@ class SPListREST {
 				"either array or string";
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists(guid'" +
+			url: this.forApiPrefix + "/web/lists(guid'" +
 						this.listGuid + "')/fields(guid'" + parameters.id + "')",
 			method: "POST",
 			headers: {
@@ -1782,7 +1785,7 @@ class SPListREST {
 		if (parameters && parameters.query)
 			query = constructQueryParameters(parameters.query);
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists(guid'" +
+			url: this.forApiPrefix + "/web/lists(guid'" +
 					this.listGuid + "')/contentTypes" + query,
 			method: "GET"
 		});
@@ -1847,7 +1850,7 @@ class SPListREST {
 		if (parameters && parameters.query)
 			query = constructQueryParameters(parameters.query);
 		return SPListREST.httpRequestPromise({
-			url: this.apiPrefix + "/web/lists(guid'" +
+			url: this.forApiPrefix + "/web/lists(guid'" +
 					this.listGuid + "')/views" + query,
 			method: "GET"
 		});
@@ -1866,7 +1869,7 @@ class SPListREST {
 		body = formatRESTBody(body);
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/lists(guid'" + this.listGuid + "')/views",
+			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/views",
 			method: "POST",
 			body: body
 		});
@@ -1880,7 +1883,7 @@ class SPListREST {
 
 		return SPListREST.httpRequestPromise({
 			setDigest: true,
-			url: this.apiPrefix + "/web/GetList(@a1)/Views(@a2)/SetViewXml()?@a1='" +
+			url: this.forApiPrefix + "/web/GetList(@a1)/Views(@a2)/SetViewXml()?@a1='" +
 					this.serverRelativeUrl + "'&@a2='" + this.listGuid + "'",
 			method: "POST",
 			body: {"ViewXml": "<View Name=\"{" + createGuid() + "}\" DefaultView=\"FALSE\" MobileView=\"TRUE\" " +

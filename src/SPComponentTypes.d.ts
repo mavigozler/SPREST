@@ -32,7 +32,6 @@ interface ISPBaseListItemProperties {
 type TJQueryPlainObject = {[key:string]: [] | typeof document | string };
 type TXmlHttpRequestData =  [] | string | TJQueryPlainObject | Uint8Array;
 
-export
 type TSPResponseDataProperties = {
 	Id: string;
 	OtherId: string;
@@ -42,7 +41,6 @@ type TSPResponseDataProperties = {
 	WebTemplate?: string;
 };
 
-export
 type TSPResponseData = {
 	d?: {
 		results?: TSPResponseDataProperties[],
@@ -59,12 +57,9 @@ type TSPResponseData = {
 
 };
 
-export
 type TSuccessCallback = (data: TSPResponseData, status?: string, reqObj?: JQueryXHR) => void;
-export
 type TErrorCallback = (reqObj: JQueryXHR, status?: string, err?: string) => void;
 
-export
 type THttpRequestProtocol = "https" | "http" | "https://" | "http://";
 
 type THttpRequestMethods = "GET" | "POST" | "PUT" | "PATCH" | "HEAD" | "OPTIONS" |
@@ -122,6 +117,7 @@ type HttpStatus = 0
   | 400 | 401 | 402 | 403 | 404 | 405 | 406 | 407 | 408 | 409 | 410 | 411 | 412 | 413 | 414 | 415 | 416 | 417 | 418 | 422 | 423 | 424 | 425 | 426 | 428 | 429 | 431 | 451
   | 500 | 501 | 502 | 503 | 504 | 505 | 506 | 507 | 508 | 510 | 511;
 
+
 type TFetchInfo = {
 	RequestedUrl: string;
 	Etag: null | string;
@@ -143,7 +139,6 @@ type THttpRequestBody<T = any> = {
 		[key: string]: T;
 	}
 
-export
 type TArrayToJSON = Record<string, string | boolean | object>
 
 type TQueryProperties = "Expand" | "Filter" | "Select" | "expand" | "filter" | "select";
@@ -304,6 +299,7 @@ type TSpList = {
 };
 
 type TSpListExtra = {
+	forApiPrefix: string;
    Name?: TSpList["Title"];
    type?: keyof typeof ListTemplateType;
    siteParent: TSiteInfo;
@@ -514,23 +510,20 @@ type TRawWhoPermission = {
 	};
 };
 
-
-
 type TUserGroupPermission = {
 	What: {
 		Type: "Site" | "List" | "Folder" | "Item";
 		Info: {Name: string; Id: string | number}; // what the thing being access
 	};
+	RoleTypeKind: {
+		Value: number;
+		Text: string;
+	};
 	How: {
 		PermissionValue: TSpBasePermissions;
 		PermissionFriendly: string;
-		RoleTypeKind: {
-			Value: number;
-			Text: string;
-		};
-	}[];
+	};
 };
-
 type TSiteListPermission = {
 	Who: {
 		Type: "User" | "Group";
@@ -539,11 +532,11 @@ type TSiteListPermission = {
 	How: {
 		PermissionValue: TSpBasePermissions;
 		PermissionFriendly: string;
-		RoleTypeKind: {
-			Value: number;
-			Text: string;
-		};
-	}[];
+	};
+	RoleTypeKind: {
+		Value: number;
+		Text: string;
+	};
 };
 
 type TSpMetadata = {
@@ -660,6 +653,7 @@ type TSpGroup = {
 
 
 type TSpGroupExtra = {
+	forApiPrefix: string
 	siteParentId: string;
 	Users: TUserQuickInfo[]; /* An object that represents the collection of users that belong
 		to the group. This object has a __deferred property that points to the URL
@@ -669,7 +663,6 @@ type TSpGroupExtra = {
 	RoleAssignments: object;
 };
 
-export
 type TGroupInfo = TSpGroup & TSpGroupExtra;
 
 type TGroupQuickInfo = {

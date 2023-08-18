@@ -154,7 +154,7 @@ class SPSiteREST {
 						RequestAgain(
 							elements,
 							data.__next,
-							data.results!
+							data.d.results!
 						).then((response: any) => {
 							elements.successCallback!(response);
 						}).catch((response: any) => {
@@ -225,10 +225,16 @@ class SPSiteREST {
 
 					for (let result of results!)
 						sites.push({
-							name: result.Title,
-							serverRelativeUrl: result.ServerRelativeUrl,
-							id: result.Id as string,
-							template: result.WebTemplate
+							Name: result.Title,
+							ServerRelativeUrl: result.ServerRelativeUrl,
+							Id: result.Id as string,
+							Template: result.WebTemplate,
+							Title: result.Title,
+							Url: "",
+							Description: "",
+							forApiPrefix: "",
+							tsType: "TSiteInfo",
+							siteParent: undefined
 						});
 					resolve(sites);
 				},
@@ -257,22 +263,22 @@ class SPSiteREST {
 
 	getSitePedigree(siteUrl: string | null): Promise<{pedigree: TSiteInfo; arrayPedigree: TSiteInfo[]}> {
 		return new Promise((resolve, reject) => {
-			let pedigree: TSiteInfo = {},
+			let pedigree: TSiteInfo = {} as TSiteInfo,
 
-					siteInfo: TSiteInfo = {},
+					siteInfo: TSiteInfo = {} as TSiteInfo,
 					repeatGetParent = (siteInfo: TSiteInfo) => {
-						this.getParentWeb(siteInfo.server! + siteInfo.serverRelativeUrl).then((ParentWeb) => {
+						this.getParentWeb(siteInfo.server! + siteInfo.ServerRelativeUrl).then((ParentWeb) => {
 							if (ParentWeb) {  // != null
-								let siteParent: TSiteInfo = {};
+								let siteParent: TSiteInfo = {} as TSiteInfo;
 								ParentWeb = ParentWeb.data.d;
-								siteParent.name = ParentWeb.Title;
+								siteParent.Name = ParentWeb.Title;
 								siteParent.server = siteInfo.server;
-								siteParent.serverRelativeUrl = ParentWeb.ServerRelativeUrl;
-								siteParent.id = ParentWeb.Id;
-								siteParent.template = ParentWeb.WebTemplate;
+								siteParent.ServerRelativeUrl = ParentWeb.ServerRelativeUrl;
+								siteParent.Id = ParentWeb.Id;
+								siteParent.Template = ParentWeb.WebTemplate;
 								siteInfo.parent = siteParent;
-								siteParent.children = [];
-								siteParent.children.push(siteInfo);
+								siteParent.subsites = [];
+								siteParent.subsites.push(siteInfo as any);
 								repeatGetParent(siteParent);
 							} else {
 								this.fillOutPedigree(siteInfo).then((response) => {
@@ -288,27 +294,33 @@ class SPSiteREST {
 
 			if (!siteUrl) {
 				siteInfo.server = this.server;
-				siteInfo.serverRelativeUrl = this.serverRelativeUrl;
+				siteInfo.ServerRelativeUrl = this.serverRelativeUrl;
 			} else {
 				let parsedUrl: TParsedURL | null = ParseSPUrl(siteUrl);
 
 				if (parsedUrl == null)
 					throw "Parameter 'siteUrl' was not a parseable SharePoint URL";
 				siteInfo.server = parsedUrl.server;
-				siteInfo.serverRelativeUrl = parsedUrl.siteFullPath;
+				siteInfo.ServerRelativeUrl = parsedUrl.siteFullPath;
 			}
 			pedigree.referenceSite = {
 			 ///pedigree.referenceSite = {
-				name: null,
+				Name: undefined,
 				server: siteInfo.server,
-				serverRelativeUrl: this.serverRelativeUrl,
-				id: this.id,
-				template: this.template,
+				ServerRelativeUrl: this.serverRelativeUrl,
+				Id: this.id,
+				Template: this.template,
 				parent: null,
-				children: []
+				subsites: [],
+				Title: siteInfo.Title,
+				Description: siteInfo.Description,
+				Url: siteInfo.Url,
+				forApiPrefix: "",
+				tsType: "TSiteInfo",
+				siteParent: undefined
 			};
 			this.arrayPedigree = [];
-			this.arrayPedigree.push(pedigree.referenceSite);
+			this.arrayPedigree.push(pedigree.referenceSite as TSiteInfo);
 			//repeatGetParent(pedigree.referenceSite!);
 			repeatGetParent(pedigree.referenceSite!);
 		});
@@ -322,31 +334,37 @@ class SPSiteREST {
 				throw "fillOutPedigree():  parameter 'parentWeb' is not defined";
 			subSite = new SPSiteREST({
 					server: this.server as string,
-					site: parentWeb.serverRelativeUrl as string
+					site: parentWeb.ServerRelativeUrl as string
 				});
 			subSite.init().then(() => {
 				subSite.getSubsites().then((webInfos: any) => {
 					if (typeof webInfos == "undefined")
 						reject("Promise.success() returned nothing");
 					else {
-						if (typeof parentWeb.children == "undefined")
-							parentWeb.children = [];
+						if (typeof parentWeb.subsites == "undefined")
+							parentWeb.subsites = [];
 						if (webInfos.length > 0) {
 							let idx: number,
 									webInfoRequests: Promise<any>[] = [];
 
 							for (let webinfo of webInfos) {
-								idx = parentWeb.children.push({
-									name: webinfo.name,
+								idx = parentWeb.subsites.push({
+									Name: webinfo.name,
 									server: parentWeb.server,
-									serverRelativeUrl: webinfo.serverRelativeUrl,
-									id: webinfo.id,
-									template: webinfo.template,
+									ServerRelativeUrl: webinfo.serverRelativeUrl,
+									Id: webinfo.id,
+									Url: webinfo.url,
+									Template: webinfo.template,
 									parent: parentWeb,
-									children: []
+									subsites: [],
+									tsType: "TSiteInfo",
+									Title: "",
+									Description: "",
+									forApiPrefix: "",
+									siteParent: undefined
 								}) - 1;
-								this.arrayPedigree.push(parentWeb.children[idx]);
-								webInfoRequests.push(this.fillOutPedigree(parentWeb.children[idx]));
+								this.arrayPedigree.push((parentWeb.subsites as TSiteInfo[])[idx]);
+								webInfoRequests.push(this.fillOutPedigree((parentWeb.subsites as TSiteInfo[])[idx]));
 							}
 
 							Promise.all(webInfoRequests).then((response) => {
@@ -632,7 +650,8 @@ class SPSiteREST {
 							  "type": "SP.Folder"
 							},
 							"ServerRelativeUrl": item.serverRelativeUrl
-						 }
+						},
+						contextinfo: ""
 					});
 					batchRequestingQueue(
 					{host: destLib.server, path: destLib.site,

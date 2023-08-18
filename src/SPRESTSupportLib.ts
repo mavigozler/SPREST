@@ -6,15 +6,6 @@ import * as SPRESTTypes from './SPRESTtypes';
 */
 /* jshint -W069, -W119 */
 
-type TFetchInfo = {
-	RequestedUrl: string;
-	HttpStatus: number;
-	ContentType: string | null;
-	Etag: string | null; // \"\d{3}\"
-	Data: any;
-	ProcessedData: any[];
-};
-
 const SPstdHeaders: THttpRequestHeaders = {
 	"Content-Type":"application/json;odata=verbose",
 	"Accept":"application/json;odata=verbose"
@@ -279,9 +270,15 @@ function singleBatchRequest(
 						Etag: null,
 						ContentType: request.headers ? request.headers!["Content-Type"] as string : null,
 						HttpStatus: 0,
-						Data: "A URL with POST method was found with a GetById() function used. " +
-							"POST methods create items, while PATCH methods are used to update items.",
-						ProcessedData: []
+						Data: {
+							error: {
+								message: {
+									value: "A URL with POST method was found with a GetById() function used. " +
+										"POST methods create items, while PATCH methods are used to update items."
+								}
+							}
+						},
+						ProcessedData: [] as TSPResponseData
 					}]
 				});
 				return;
@@ -396,11 +393,11 @@ function splitRequests(
 			if ((httpCode = parseInt(response.match(/HTTP\/\d\.\d (\d{3})/)![1])) < 400) {
 				idx = fetchInfo.push({
 					RequestedUrl: requestedUrls[urlIndex++],
-					HttpStatus: httpCode,
+					HttpStatus: httpCode as HttpStatus,
 					ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
 					Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
 					Data: JSON.parse(response.match(/\{.*\}/)![0]),
-					ProcessedData: []
+					ProcessedData: [] as TSPResponseData
 				}) - 1;
 				checkResponse.push(new Promise((resolve, reject) => {
 					collectNext(fetchInfo[idx].Data, []).then((fetched) => {
@@ -412,11 +409,11 @@ function splitRequests(
 			} else
 				errorResponses.push({
 					RequestedUrl: requestedUrls[urlIndex++],
-					HttpStatus: httpCode,
+					HttpStatus: httpCode as HttpStatus,
 					ContentType: (match = response.match(/CONTENT\-TYPE: (.*)\r\n(ETAG|\r\n)/)) != null ? match[1] : null,
 					Etag: (match = response.match(/\r\nETAG: ("\d{3}")\r\n/)) != null ? match[1] : null,
 					Data: JSON.parse(response.match(/\{.*\}/)![0]),
-					ProcessedData: []
+					ProcessedData: [] as TSPResponseData
 				});
 		}
 		Promise.all(checkResponse).then((fetches) => {
@@ -513,7 +510,8 @@ function SPListColumnCopy(
 					body[destColumnIntName] = response[sourceColumnIntName];
 					requests.push({
 						url: siteURL + "/_api/web/lists" + listNameOrGUID + "/items(" + response.ID + ")",
-						body: body
+						body: body,
+						contextinfo: "" // what is this?
 					});
 				}
 
