@@ -521,8 +521,6 @@ type TRawWhoPermission = {
 	};
 };
 
-
-
 type TUserGroupPermission = {
 	What: {
 		Type: "Site" | "List" | "Folder" | "Item";
@@ -531,11 +529,11 @@ type TUserGroupPermission = {
 	How: {
 		PermissionValue: TSpBasePermissions;
 		PermissionFriendly: string;
-		RoleTypeKind: {
-			Value: number;
-			Text: string;
-		};
-	}[];
+	};
+	RoleTypeKind: {
+		Value: number;
+		Text: string;
+	};
 };
 
 type TSiteListPermission = {
@@ -546,11 +544,11 @@ type TSiteListPermission = {
 	How: {
 		PermissionValue: TSpBasePermissions;
 		PermissionFriendly: string;
-		RoleTypeKind: {
-			Value: number;
-			Text: string;
-		};
-	}[];
+	};
+	RoleTypeKind: {
+		Value: number;
+		Text: string;
+	};
 };
 
 type TSpMetadata = {

@@ -13,7 +13,8 @@
 */
 
 import {
-	TSPResponseData
+	TSPResponseData,
+	TSPResponseDataProperties
 } from './SPComponentTypes';
 
 import {
@@ -119,7 +120,7 @@ class SPUserREST {
 		return this.requestUserInfo({lastName: lastName, firstName: firstName});
 	}
 
-	getAllSharePointUsersInfo(query?: string): Promise<TSPResponseData[]> {
+	getAllSharePointUsersInfo(query?: string): Promise<TSPResponseDataProperties[]> {
 		return new Promise((resolve, reject) => {
 			RESTrequest({
 				url: `https://${this.server}${this.site}/_api/web/siteuserinfolist/items` + query ? "?" + query : "",
