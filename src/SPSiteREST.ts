@@ -643,7 +643,7 @@ class SPSiteREST {
 
 				for (let item of folders)
 					requests.push({
-						url: destLib.apiPrefix + "/web/folders",
+						url: destLib.forApiPrefix + "/web/folders",
 						method: "POST",
 						body: {
 							"__metadata": {

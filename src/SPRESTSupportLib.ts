@@ -1,9 +1,5 @@
 "use strict";
 
-/*
-import * as SPRESTGlobals from './SPRESTGlobals';
-import * as SPRESTTypes from './SPRESTtypes';
-*/
 /* jshint -W069, -W119 */
 
 const SPstdHeaders: THttpRequestHeaders = {

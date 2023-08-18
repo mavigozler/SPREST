@@ -2,12 +2,6 @@
 
 /* jshint -W119, -W069, -W083 */
 
-/*
-import * as SPRESTTypes from './SPRESTtypes';
-import { SPSiteREST } from './SPSiteREST';
-import * as SPRESTSupportLib from './SPRESTSupportLib';
-import * as SPRESTGlobals from './SPRESTGlobals';
-*/
 /***************************************************************
  *  Basic interface
  * 		spList = new SPListREST(setup: TListSetup)
