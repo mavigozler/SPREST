@@ -36,6 +36,7 @@ class SPSiteREST {
 	server: string;
 	sitePath: string;
 	forApiPrefix: string;
+	forApiPrefix: string;
 	id: string = "";
 	serverRelativeUrl: string = "";
 	isHubSite: boolean = Boolean();
@@ -81,6 +82,7 @@ class SPSiteREST {
 		if (setup.site.charAt(0) != "/")
 			this.sitePath = "/" + this.sitePath;
 		this.forApiPrefix = this.server + this.sitePath;
+		this.forApiPrefix = this.server + this.sitePath;
 	}
 
 	/**
@@ -88,6 +90,7 @@ class SPSiteREST {
 	 * 	by asynchronous request
 	 * @returns Promise
 	 */
+	init(): Promise<SPSiteREST> {
 	init(): Promise<SPSiteREST> {
 		return new Promise((resolve, reject) => {
 			RESTrequest({
@@ -262,6 +265,8 @@ class SPSiteREST {
 
 	getSitePedigree(siteUrl: string | null):
 				Promise<{pedigree: TSiteInfo; arrayPedigree: TSiteInfo[]}> {
+	getSitePedigree(siteUrl: string | null):
+				Promise<{pedigree: TSiteInfo; arrayPedigree: TSiteInfo[]}> {
 		return new Promise((resolve, reject) => {
 			const pedigree: TSiteInfo = {} as TSiteInfo,
 
@@ -294,6 +299,7 @@ class SPSiteREST {
 			if (!siteUrl) {
 				siteInfo.server = this.server;
 				siteInfo.ServerRelativeUrl = this.serverRelativeUrl;
+				siteInfo.ServerRelativeUrl = this.serverRelativeUrl;
 			} else {
 				const parsedUrl: TParsedURL | null = //SPRESTSupportLib.
 					ParseSPUrl(siteUrl);
@@ -301,6 +307,7 @@ class SPSiteREST {
 				if (parsedUrl == null)
 					throw "Parameter 'siteUrl' was not a parseable SharePoint URL";
 				siteInfo.server = parsedUrl.server;
+				siteInfo.ServerRelativeUrl = parsedUrl.siteFullPath;
 				siteInfo.ServerRelativeUrl = parsedUrl.siteFullPath;
 			}
 			pedigree.referenceSite = {
@@ -310,7 +317,18 @@ class SPSiteREST {
 				ServerRelativeUrl: this.serverRelativeUrl,
 				Id: this.id,
 				Template: this.template,
+				ServerRelativeUrl: this.serverRelativeUrl,
+				Id: this.id,
+				Template: this.template,
 				parent: null,
+				subsites: [],
+				Title: this.Title,
+				typeInSP: "SUBSITE",
+				tsType: "TSiteInfo",
+				Url: this.Url,
+				Description: this.Description,
+				siteParent: undefined,
+				forApiPrefix: siteInfo.server + this.serverRelativeUrl
 				subsites: [],
 				Title: this.Title,
 				typeInSP: "SUBSITE",
@@ -337,6 +355,7 @@ class SPSiteREST {
 			});
 			subSite.init().then(() => {
 				subSite.getSubsites().then((webInfos: TSiteInfo[]) => {
+				subSite.getSubsites().then((webInfos: TSiteInfo[]) => {
 					if (typeof webInfos == "undefined")
 						reject("Promise.success() returned nothing");
 					else {
@@ -361,7 +380,19 @@ class SPSiteREST {
 									Description: this.Description,
 									siteParent: parentWeb,
 									forApiPrefix: parentWeb.server! + webinfo.ServerRelativeUrl
+									ServerRelativeUrl: webinfo.ServerRelativeUrl,
+									Id: webinfo.Id,
+									Template: webinfo.Template,
+									subsites: [],
+									typeInSP: "SUBSITE",
+									tsType: "TSiteInfo",
+									Url: this.Url,
+									Description: this.Description,
+									siteParent: parentWeb,
+									forApiPrefix: parentWeb.server! + webinfo.ServerRelativeUrl
 								}) - 1;
+								this.arrayPedigree.push((parentWeb.subsites as TSiteInfo[])[idx]);
+								webInfoRequests.push(this.fillOutPedigree((parentWeb.subsites as TSiteInfo[])[idx]));
 								this.arrayPedigree.push((parentWeb.subsites as TSiteInfo[])[idx]);
 								webInfoRequests.push(this.fillOutPedigree((parentWeb.subsites as TSiteInfo[])[idx]));
 							}
@@ -374,6 +405,7 @@ class SPSiteREST {
 						} else
 							resolve(true);
 					}
+				}).catch((response: any) => {
 				}).catch((response: any) => {
 					reject(response);
 				});
@@ -580,6 +612,7 @@ class SPSiteREST {
 							}).then(() => {
 							/*
 								iDestListREST.createListItems(response.data.d.ressults).then((response: any) => {
+								iDestListREST.createListItems(response.data.d.ressults).then((response: any) => {
 									resolve(response);
 								}).catch((response: any) => {
 									reject(response);
@@ -716,7 +749,10 @@ class SPSiteREST {
 					requests.push({
 						url: destLib.forApiPrefix + "/_api/web/folders",
 						contextinfo: destLib.server + destLib.serverRelativeUrl,
+						url: destLib.forApiPrefix + "/_api/web/folders",
+						contextinfo: destLib.server + destLib.serverRelativeUrl,
 						method: "POST",
+						headers: SPSiteREST.stdHeaders,
 						body: {
 							"__metadata": {
 								"type": "SP.Folder"
@@ -783,7 +819,9 @@ class SPSiteREST {
 						body[field.InternalName] = item[field.InternalName];
 					itemMetadata.push({body:body});
 				iDestListREST.createListItems(itemMetadata, true).then((response: any) => {
+				iDestListREST.createListItems(itemMetadata, true).then((response: any) => {
 					resolve(response);
+				}).catch((response: any) => {
 				}).catch((response: any) => {
 					reject(response);
 				}); */

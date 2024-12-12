@@ -55,6 +55,7 @@ class SPListREST {
 	server: string;
 	site: string;
 	forApiPrefix: string;
+	forApiPrefix: string;
 	listName: string = "";
 	listGuid: string = "";
 	baseUrl: string = "";
@@ -74,6 +75,7 @@ class SPListREST {
 	linkToDocumentContentTypeId: string = "";
 	currentListIdIndex: number = -1;
 	setup: TListSetup;
+	sitePedigree: TSiteInfo = {} as TSiteInfo;
 	sitePedigree: TSiteInfo = {} as TSiteInfo;
 	arrayPedigree: TSiteInfo[] = [];
 
@@ -304,6 +306,7 @@ class SPListREST {
 				const lookupListId = parameters.LookupList.replace(/[{}]/g, "");
 
 				for (site of this.arrayPedigree)
+					if (site.Id == parameters.LookupWebId)
 					if (site.Id == parameters.LookupWebId)
 						break;
 				RESTrequest({
@@ -1190,6 +1193,7 @@ class SPListREST {
 		RESTrequest({
 			setDigest: true,
 			url: this.forApiPrefix + "/_api/web/getFolderByServerRelativeUrl('" +
+			url: this.forApiPrefix + "/_api/web/getFolderByServerRelativeUrl('" +
 						this.baseUrl + "')/Files/add(url='" + SPListREST.escapeApostrophe(
 						parameters.fileName) + "',overwrite=" + parameters.willOverwrite +
 						")?$expand=ListItemAllFields",
@@ -1718,6 +1722,8 @@ class SPListREST {
 				requests.push({
 					url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')/fields",
 					contextinfo: this.forApiPrefix,
+					url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')/fields",
+					contextinfo: this.forApiPrefix,
 					method: "POST",
 					body: body
 				});
@@ -1798,6 +1804,7 @@ class SPListREST {
 				"either array or string";
 		RESTrequest({
 			setDigest: true,
+			url: this.forApiPrefix + "/_api/web/lists(guid'" +
 			url: this.forApiPrefix + "/_api/web/lists(guid'" +
 						this.listGuid + "')/fields(guid'" + parameters.id + "')",
 			method: "POST",
@@ -1970,6 +1977,7 @@ class SPListREST {
 
 		RESTrequest({
 			setDigest: true,
+			url: this.forApiPrefix + "/_api/web/GetList(@a1)/Views(@a2)/SetViewXml()?@a1='" +
 			url: this.forApiPrefix + "/_api/web/GetList(@a1)/Views(@a2)/SetViewXml()?@a1='" +
 					this.serverRelativeUrl + "'&@a2='" + this.listGuid + "'",
 			method: "POST",

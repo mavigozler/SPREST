@@ -50,6 +50,7 @@ type UserData = {
  *        .site {string} [optional]  site within server site collection, empty string is default
  *        .debugging {boolean}  if true, set to debugging
  */
+export
 class SPUserREST {
 	server: string;
 	site: string;
@@ -65,9 +66,18 @@ class SPUserREST {
 			throw "'parameters.server' does not appear to follow the pattern 'http[s]://host.name.com/. It must include protocol & host name";
 		this.server = server;
 		if (!(this.site = site))
+		this.server = server;
+		if (!(this.site = site))
 			throw "A site path is required in 'parameters.site'";
 		this.site = site;
+		this.site = site;
 	}
+
+	requestUserInfo(args: {
+		userId?: number | null,
+		lastName?: string | null,
+		firstName?: string | null
+	}): Promise<{UserInfo: UserData; RawData: TSPResponseData}> {
 
 	requestUserInfo(args: {
 		userId?: number | null,
@@ -133,13 +143,16 @@ class SPUserREST {
 						resolve(data.d!.results! as TSPResponseData[]);
 				},
 				errorCallback: (reqObj/*, status, errThrown */) => {
+				errorCallback: (reqObj/*, status, errThrown */) => {
 					reject(reqObj);
 				}
 			});
 		});
 	}
+	}
 }
 
+class User {
 class User {
 	server: string;
 	site: string;

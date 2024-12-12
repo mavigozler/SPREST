@@ -86,8 +86,10 @@ class SPSearchREST {
 				success: (data: TSPResponseData, status: string, requestObj: JQueryXHR) => {
 					if (data.d && data.__next)
 						RequestAgain(
+						RequestAgain(
 							elements,
 							data.__next,
+							data.d.results!
 							data.d.results!
 						).then((response: any) => {
 							elements.successCallback!(response);

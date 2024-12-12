@@ -53,6 +53,7 @@ const ListItemEntityTypeRE = /EntityType|EntityTypeName|ListItemEntityTypeFullNa
 
 // public
 
+export
 class SPServerREST {
 	URL: string;
 	apiPrefix: string;
@@ -171,11 +172,19 @@ function SPListColumnCopy(
 						body: body,
 						method: "PATCH",
 						headers: {
+						contextinfo: siteURL,
+						body: body,
+						method: "PATCH",
+						headers: {
 							"Content-Type": "application/json;odata=verbose",
 							"Accept": "application/json;odata=nometadata",
 							"IF-MATCH": "*",
 					//		"X-HTTP-METHOD": "MERGE"
 						}
+					});
+				}
+
+				batchRequestingQueue(
 					});
 				}
 
@@ -246,16 +255,26 @@ function checkEntityTypeProperty(body: object, typeCheck: string): boolean {
 	if (typeCheck == "item")
 		checkRE = //SPRESTGlobals.
 			ListItemEntityTypeRE;
+		checkRE = //SPRESTGlobals.
+			ListItemEntityTypeRE;
 	else if (typeCheck == "list")
+		checkRE = //SPRESTGlobals.
+			ListEntityTypeRE;
 		checkRE = //SPRESTGlobals.
 			ListEntityTypeRE;
 	else if (typeCheck == "field")
 		checkRE = //SPRESTGlobals.
 			ListFieldEntityTypeRE;
+		checkRE = //SPRESTGlobals.
+			ListFieldEntityTypeRE;
 	else if (typeCheck == "content type")
 		checkRE = // SPRESTGlobals.
 			ContentTypeEntityTypeRE;
+		checkRE = // SPRESTGlobals.
+			ContentTypeEntityTypeRE;
 	else if (typeCheck == "view")
+		checkRE = //SPRESTGlobals.
+			ViewEntityTypeRE;
 		checkRE = //SPRESTGlobals.
 			ViewEntityTypeRE;
 	else
@@ -330,6 +349,7 @@ function ParseSPUrl (url: string): TParsedURL | undefined {
 			listName = urlParts[i + 1].substring(1);
 			pathDone = true;
 			finalParsedUrl.listConfirmed = true;
+			finalParsedUrl.listConfirmed = true;
 			i++;
 		} else if (urlParts[i].search(/^\/SiteAssets/) == 0 ||
 					urlParts[i].search(/^\/SitePages|^\/Pages/) == 0) {  // next url part is .aspx
@@ -367,6 +387,13 @@ function ParseSPUrl (url: string): TParsedURL | undefined {
 	if (query) {
 		for (const pair of query.entries())
 			tmpArr.push({key: pair[0], value: pair[1]});
+		finalParsedUrl.query = tmpArr;
+	}
+	return finalParsedUrl;
+}
+
+/**
+ * @function serialSPProcessing --
 		finalParsedUrl.query = tmpArr;
 	}
 	return finalParsedUrl;
@@ -1414,6 +1441,97 @@ const SelectAllCheckboxes =
 const UnselectAllCheckboxes =
     "data:image/png;base64,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";
 
+
+/*************************************************
+   Formats for Batch Requests
+
+	These examples write to the server.
+
+POST http://{site_url}/_api/$batch
+Content-Type: multipart/mixed; boundary=batch_{batch_GUID}
+Accept: application/json;odata=verbose
+
+--batch_{batch_GUID}
+Content-Type: application/http
+Content-Transfer-Encoding: binary
+
+POST {endpoint_url} HTTP/1.1
+Content-Type: application/json;odata=verbose
+Content-Length: {length}
+
+{request_body}
+
+--batch_{batch_GUID}
+Content-Type: application/http
+Content-Transfer-Encoding:binary
+
+POST {endpoint_url} HTTP/1.1
+Content-Type: application/json;odata=verbose
+Content-Length: {length}
+
+{request_body}
+
+--batch_{batch_GUID}--
+
+{site_url}: The URL of the SharePoint site.
+{batch_GUID}: A unique identifier for the batch request.
+     You can generate this using any method you prefer.
+{endpoint_url}: The URL of the REST endpoint for the
+   operation you want to perform.
+{length}: The length of the request body in bytes.
+{request_body}: The body of the request in JSON format.
+
+You can include multiple requests in a single batch request by adding more
+Content-Type and Content-Transfer-Encoding headers, followed by the endpoint
+URL and request body for each additional request.
+
+
+//////////////  Format for three GET requests
+
+POST http://{site_url}/_api/$batch
+Content-Type: multipart/mixed; boundary=batch_{batch_GUID}
+Accept: application/json;odata=verbose
+
+--batch_{batch_GUID}
+Content-Type: application/http
+Content-Transfer-Encoding:binary
+
+GET {endpoint_url_1} HTTP/1.1
+Accept: application/json;odata=verbose
+
+--batch_{batch_GUID}
+Content-Type: application/http
+Content-Transfer-Encoding:binary
+
+GET {endpoint_url_2} HTTP/1.1
+Accept: application/json;odata=verbose
+
+--batch_{batch_GUID}
+Content-Type: application/http
+Content-Transfer-Encoding:binary
+
+GET {endpoint_url_3} HTTP/1.1
+Accept: application/json;odata=verbose
+
+--batch_{batch_GUID}--
+
+In this example, you would replace the following variables:
+
+{site_url}: The URL of the SharePoint site.
+{batch_GUID}: A unique identifier for the batch request.
+{endpoint_url_1}, {endpoint_url_2}, and {endpoint_url_3}: The URLs
+of the REST endpoints for the three GET requests.
+
+Note that each request includes an Accept header that specifies
+the desired response format. In this case, application/json;odata=verbose
+is specified for all three requests, but you can change this to another
+format if you prefer.
+
+Also note that each request is separated by a boundary string
+(--batch_{batch_GUID}). This boundary string should be unique
+and not appear in any of the request URLs or bodies.
+
+*****************************************************/
 
 /*************************************************
    Formats for Batch Requests
