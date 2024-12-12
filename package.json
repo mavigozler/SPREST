@@ -1,6 +1,25 @@
 {
   "devDependencies": {
+    "@types/del": "^4.0.0",
+    "@types/gulp": "^4.0.17",
+    "@types/gulp-sourcemaps": "^0.0.38",
+    "@types/inquirer": "^9.0.7",
     "@types/jquery": "^3.5.16",
-    "tslib": "^2.4.0"
-  }
+    "@types/minimist": "^1.2.5",
+    "@types/node": "^20.12.7",
+    "del": "^7.1.0",
+    "fs": "^0.0.1-security",
+    "glob": "^10.3.12",
+    "gulp": "^5.0.0",
+    "gulp-sourcemaps": "^3.0.0",
+    "gulp-typescript": "^6.0.0-alpha.1",
+    "inquirer": "^9.2.20",
+    "json5": "^2.2.3",
+    "minimist": "^1.2.8",
+    "tslib": "^2.4.0",
+    "winston": "^3.13.0",
+    "winston-color": "^1.0.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "type": "module"
 }

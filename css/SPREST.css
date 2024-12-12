@@ -1,0 +1,204 @@
+﻿body {
+	background-color:#f8fff8;
+	font:normal 10pt Arial,sans-serif;
+}
+label {
+	font:bold 10pt 'Segoe UI',Helvetica,sans-serif;
+	color:purple;
+}
+input {
+	font:normal 12pt Arial,Tahoma,sans-serif;
+}
+button {
+	cursor:pointer;
+}
+
+div#container {
+	width:70%;
+	padding:1em 2em;
+	margin:2em auto;
+	min-width:1000px;
+}
+#request-button {
+	font:bold 14pt Arial,sans-serif;
+}
+#previous {
+	width:100%;
+}
+#main-grid {
+    display:grid;
+    grid-template-columns: auto 1fr;
+    row-gap: 5px;
+}
+/********** top bar **************/
+fieldset#top-bar {
+	grid-column: 1/span 2;
+	border:none;
+	padding:0;
+	margin:0;
+}
+span#right-floated-format-date-text-request-button {
+	float:right;
+}
+label.col1-label {
+	justify-self: end;
+	padding-right:0.5em;
+}
+span.chkbox-control {
+	display:inline-block;
+}
+/******* Custom Header Controls ******/
+p#show-hide-add-header-controls {
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: 1fr auto;
+}
+
+input#request-url,
+input.odata-inputs,
+textarea#request-body,
+select#previousRequest-select-control {
+	width:auto;
+}
+span.radio-control {
+	display:inline-block;
+	margin-right:1em;
+	font: normal 9pt Arial,sans-serif;
+}
+.radio-control input {
+	width: 12px;
+	margin-right:0px;
+	vertical-align:-1px;
+}
+div#special-sets {display:none;}
+p#headers {
+	margin:0;
+	display:grid;
+	grid-template-columns:auto auto;
+}
+p#settings {display:none;float:right;margin:0;text-align:right;}
+span.headerset {
+	display: flex;
+	justify-content: space-between;
+	width: 100%;
+	align-items: center;
+}
+.left-space {
+	flex: 0 0 30%; /* 30% width, don't grow or shrink */
+}
+.middle-space {
+	flex-grow: 1; /* Take up remaining space */
+}
+/* .right-space {
+	 No specific width needed for the icon, it will occupy its own width
+} */
+span.headerset button {font:bold 10pt Helvetica,sans-serif;padding:0;line-height:11pt;}
+
+.hname {
+	font:normal 9pt Helvetica,sans-serif;
+	width:28%;
+	border:2px solid blue;
+	text-align:right;
+	flex: 0 0 30%;
+}
+.hvalue {
+	font:normal 9pt Helvetica,sans-serif;
+	width:60%;
+	border:2px solid green;
+	flex-grow: 1;
+}
+#headermenu {
+	display:none;
+	margin:0 0 0 1em;
+}
+
+button.trash-button {
+	min-width:10px;
+	margin:0 6px 0 3px;
+}
+
+/********************************
+  HTTP Status, Response Date Time, URL
+*********************************/
+div#http-status-date-time-URL-panel {
+	margin:0;
+	font-weight:bold;
+	grid-column:1 / span 2;
+	color:purple;
+}
+
+p#response-date-time-block {
+	margin:0;
+	float:right;
+	width:40em;
+}
+
+span#response-datetime-value,
+span#http-status-valuue,
+span#sent-url {
+	color:black;
+}
+
+div#response-object-display-areas {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	grid-column: 1/span 2;
+}
+
+div#response-object-display-areas label {
+	margin-right:0.5em;
+	vertical-align:top;
+}
+
+/******* Add Header Dialog Box ******/
+div#add-header-dialog-box {
+	display:none;
+	z-index: 1;
+	position:fixed;
+	border:5px outset navy;
+	background-color: #e9eae3;
+	padding:0.3em 0.5em;
+}
+div#add-header-dialog-box label {
+	font: bold 10pt Arial,sans-serif;
+	color:black;
+	display:block;
+}
+span#custom-add-header-title {
+	grid-column: 1/span 2;
+	font: bold 125% Tahoma,sans-serif;
+	display: block;
+	color:rgb(22, 9, 61);
+	text-align: center;
+}
+p#add-header-entry-inputs {
+	display:grid;
+	grid-template-columns: auto 1fr;
+	column-gap: 3px;
+	margin:0.75em 0;
+	align-items: center;
+	color: brown;
+}
+p#add-header-button-set {
+	text-align: center;
+	margin: 1em auto 0.5em auto;
+}
+input#add-custom-header-name,
+input#add-custom-header-value {
+	margin: 0.3em auto;
+	color:black;
+	font: normal 9pt "Courier New",Courier,monospace;
+}
+button#set-custom-header-button {
+	font-weight: bold;
+	font-size: 120%;
+	border:2px solid black;
+}
+button#cancel-custom-header-button {
+	border:1px solid rgb(124, 20, 139);
+	color:rgb(122, 21, 131);
+}
+span#colon-text {
+	font: 900 150% "High Tower Text";
+}

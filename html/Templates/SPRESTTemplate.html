@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>REST Requesting</title>
+<meta charset="utf-8" />
+   <!-- $${LINK ELEMENTS} -->
+   <!-- $${SCRIPT ELEMENTS} -->
+</head>
+<body>
+<div id="container">
+<form id="request-form">
+<!-- Start HTML Form Web Part -->
+ <div id="main-grid">
+	<div id="response-object-display-areas">
+		<label class="col1-label">Response:</label>
+		  <textarea rows="12" name="response"></textarea>
+	  <label class="col1-label">Object:</label>
+		  <div id="object-area"></div>
+	</div>
+	<div id="http-status-date-time-URL-panel">
+		<p id="response-date-time-block">Response Date/Time:
+			 <span id="response-datetime-value">&nbsp;</span>
+		</p>
+		HTTP status:<span id="http-status-value">&nbsp;</span>
+		<br />Constructed URL: <span id="sent-url">&nbsp;</span>
+	</div>
+	 <!--  <span></span> necessary for grid -->
+<fieldset id="top-bar">
+<span id="right-floated-format-date-text-request-button">
+	 <button type="button" id="format-date-button">Format date</button>:
+	 		<input name="dateformat" size="30" />
+    <!-- id="format-date-button" click="formatDate(this.form);" -->
+     <button type="button" id="request-button">Request</button>
+     <!-- id="request-button" click="sendRequest(this.form);" -->
+</span>
+<span class="radio-control"><input type="radio" name="method" id="select-http-method-radio-get" value="GET" checked> GET</span>
+<span class="radio-control"><input type="radio" name="method" id="select-http-method-radio-post" value="POST"> POST</span>
+<span class="radio-control"><input type="radio" name="method" id="select-http-method-radio-put" value="PUT"> PUT</span>
+<span class="radio-control"><input type="radio" name="method" id="select-http-method-radio-patch" value="PATCH"> PATCH</span>
+<span class="radio-control"><input type="radio" name="method" id="select-http-method-radio-delete" value="DELETE"> DELETE</span>
+<span class="radio-control"><input type="radio" name="method" id="select-http-method-radio-head" value="HEAD"> HEAD</span>
+<span class="radio-control"><input type="radio" name="method" id="select-http-method-radio-options" value="OPTIONS"> OPTIONS</span>
+<span class="chkbox-control"><input type="checkbox" id="cors-proxy"> CORS Request</span>
+</fieldset>
+
+    <label class="col1-label">URL:</label>     <input id="request-url" name="url" data-lpignore="true" value="https://">
+    <label class="col1-label">select:</label>  <input class="odata-inputs" name="ODataSelect" data-lpignore="true">
+    <label class="col1-label">filter:</label>  <input class="odata-inputs" name="ODataFilter" data-lpignore="true">
+	 <label class="col1-label">expand:</label>
+		<p id="show-hide-add-header-controls">
+			<input class="odata-inputs" name="ODataExpand" id="expand-input" data-lpignore="true">
+			<span id="headermenu">Header:
+			  <button type="button" id="hide-header-set-button">Hide</button>
+            <!-- id="hide-header-button" click="hideHeaderSet();" -->
+			  <button type="button" id="add-header-button">Add</button>
+         <!-- id="add-header-button" click="addHeader(this);" -->
+			</span>
+
+		</p>
+	 <label class="col1-label">Headers:</label>
+	 <span id="showheaders">
+	   <button type="button" id="show-header-set-button">Show headers and special settings</button>
+       <!-- id="show-header-set-button" click="showHeaderSet();"  -->
+	 </span>
+	 <div id="special-sets">
+	  <p id="settings">
+			<input type="checkbox" name="xdigest" id="include-x-digest-chkbox"> Include Form Request Digest
+         <!-- id="include-x-digest-chkbox" onchange="setupXDigest(this);" -->
+			<br /><span id="header-count-display">&nbsp;</span>
+      </p>
+	  <p id="headers">
+		  	<input type="hidden" name="headerCount" value="2" />
+			<span class="headerset">
+				<input class="hname"  name="header-1-name" value="Content-Type" /> :
+				<input class="hvalue" name="header-1-value" value="application/json;odata=verbose" />
+            <button type="button" class="trash-button" id="delete-header1-button">&#x1f5d1;</button>
+            <!-- id="delete-header-button" click="deleteHeader('header-1', this);" -->
+			</span>
+			<span class="headerset">
+				<input class="hname"  name="header-2-name" value="Accept" /> :
+				<input class="hvalue" name="header-2-value" value="application/json;odata=verbose" />
+            <button type="button" class="trash-button" id="delete-header2-button">&#x1f5d1;</button>
+            <!--  id="delete-header2-button" onclick="deleteHeader('header-2', this);" -->
+			</span>
+		</p>
+</div>
+    <label class="col1-label">Body:</label>
+            <textarea rows="2" cols="120" name="body"></textarea>
+    <label class="col1-label">Previous:</label>
+        <select id="previousRequest-select-control" size="5"></select>
+        <!-- id="previousRequest-select-control" change="fillPrevious(this);" -->
+
+
+
+</div> <!-- id=main grid -->
+<!-- end aspx web part -->
+</form>
+</div> <!-- id=container -->
+
+<div id="add-header-dialog-box">
+	<span id="custom-add-header-title">Custom Add Header</span>
+	<p id="add-header-entry-inputs">
+	<label>Name:</label>
+	<input id="add-custom-header-name" size="30" placeholder="Content-Type">
+	<label>Value:</label>
+	<input id="add-custom-header-value" size="30" placeholder="application/json">
+	</p>
+	<p id="add-header-button-set"><button type="button" id="set-custom-header-button">Set</button>
+	<button type="button" id="cancel-custom-header-button">Cancel</button></p>
+</div>
+</body>
+</html>

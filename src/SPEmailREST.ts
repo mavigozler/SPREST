@@ -1,5 +1,13 @@
 "use strict";
 
+import type { TSPResponseData } from "./SPHttp.d.ts";
+import { RESTrequest, SPstdHeaders } from "./SPHttpReqResp.js";
+
+export {
+	SPUtilityEmailService,
+	emailDeveloper
+};
+
 /*
  *  requires use of jQuery AJAX object
  *  include the jquery.js script
@@ -23,6 +31,8 @@
  *           to be separated by a SEMI-COLON!
  */
 
+// import { TSPResponseData } from './SPComponentTypes';
+
 interface IEmailHeaders {
 	To: string;
 	Subject: string;
@@ -31,123 +41,119 @@ interface IEmailHeaders {
 	BCC?: string | null;
 	From?: string | null;
 }
+
 class SPUtilityEmailService {
-    server: string;
-    site: string;
+	server: string;
+	site: string;
 
-    constructor (parameters: {
-        server: string;
-        site: string;
-    }) {
-        this.server = parameters.server;
-        if (this.server.search(/^https?:\/\//) < 0)
-            this.server += "https://" + this.server;
-        this.site = parameters.site;
-    }
+	constructor (parameters: {
+      server: string;
+      site: string;
+   }) {
+		this.server = parameters.server;
+		if (this.server.search(/^https?:\/\//) < 0)
+			this.server += "https://" + this.server;
+		this.site = parameters.site;
+	}
 
-    structureMultipleAddresses (addressList: string): string {
-        let i: number, temp: any;
-        if (!addressList || addressList == null) return "";
-        if (addressList.search(/,/) >= 0) throw "A multiple email address list appears to be comma-separated in a string\n" + "Use a semicolon-separated set of addresses";
-        if (addressList.search(/;/) < 0) return addressList;
-        temp = addressList.split(";");
-        for (i = 0; i < temp.length; i++)
-            if (i == 0) temp[i] = temp[i] + "'";
-            else if (i == temp.length - 1) temp[i] = "'" + temp[i];
-        else temp[i] = "'" + temp[i] + "'";
-        return temp.join(",");
-    };
+	structureMultipleAddresses (addressList: string): string {
+		let i: number;
 
-    /** @method .sendEmail
-     * @param {object} properties should include {From:, To:, CC:, BCC:, Subject:, Body:}
-     */
-    sendEmail (headers: IEmailHeaders) : Promise<any> {
-        return new Promise((resolve, reject) => {
-            let To: string,
-            CC: string | null,
-            BCC: string | null,
-            From: string,
-            Subject: string,
-            Body:string,
-            uri: string = this.server;
+		if (!addressList || addressList == null) return "";
+		if (addressList.search(/,/) >= 0) throw "A multiple email address list appears to be comma-separated in a string\n" + "Use a semicolon-separated set of addresses";
+		if (addressList.search(/;/) < 0) return addressList;
+		const temp = addressList.split(";");
+		for (i = 0; i < temp.length; i++)
+			if (i == 0) temp[i] = temp[i] + "'";
+			else if (i == temp.length - 1) temp[i] = "'" + temp[i];
+			else temp[i] = "'" + temp[i] + "'";
+		return temp.join(",");
+	}
 
-            if (!headers.To)
-                throw "Object arg to SPUtilityEmailService.sendEmail() method must include .To: property";
-            if (!headers.Subject)
-                throw "Object arg to SPUtilityEmailService.sendEmail() method must include defined .Subject: property";
-            if (!headers.Body)
-                throw "Object arg to SPUtilityEmailService.sendEmail() method must include defined .Body: property";
-            window.onerror = null;
-            To = this.structureMultipleAddresses(headers.To);
-            CC = headers.CC ? this.structureMultipleAddresses(headers.CC) : "";
-            BCC = headers.BCC ? this.structureMultipleAddresses(headers.BCC) : "";
-            From = headers.From ? headers.From.replace(/"/g, '\\"') : "";
-            From = From.replace(/'/g, "\\'");
-            To = To.replace(/"/g, '\\"');
-            To = To.replace(/'/g, "\\'");
-            CC = CC.replace(/"/g, '\\"');
-            CC = CC.replace(/'/g, "\\'");
-            BCC = BCC.replace(/"/g, '\\"');
-            BCC = BCC.replace(/'/g, "\\'");
-            Subject = headers.Subject.replace(/"/g, '\\"');
-            Subject = Subject.replace(/'/g, "\\'");
-            Body = headers.Body.replace(/\\/g, "\\\\");
-            Body = Body.replace(/"/g, '\\"');
-            Body = Body.replace(/'/g, "\\'");
-            if (this.site && this.site.length > 0)
-                uri += "/" + this.site;
-            $.ajax({
-                url: "https://" + uri + "/_api/contextinfo",
-                method: "POST",
-                headers: {
-                    "Accept": "application/json;odata=verbose"
-                },
-                contentType: "application/json;odata=verbose",
-                success: (responseJSON: any) => {
-                    var digValue,
-                        // the actual transmission
-                        digValue = responseJSON.d.GetContextWebInformation.FormDigestValue;
-                    $.ajax({
-                        url: "https://" + uri + "/_api/SP.Utilities.Utility.SendEmail",
-                        method: "POST",
-                        headers: {
-                            "Accept": "application/json;odata=verbose",
-                            "X-RequestDigest": digValue
-                        },
-                        data: JSON.stringify({ properties : {
-                                __metadata: { type: "SP.Utilities.EmailProperties" },
-                                To: { results : [  To  ] },
-                                CC: { results : [  CC  ] },
-                                BCC: { results : [ BCC ] },
-                                From: From,
-                                Subject: Subject,
-                                Body: Body
-                            }
-                        }),
-                        contentType: "application/json;odata=verbose",
-                        success: (data: any, message: string, reqObj: JQueryXHR) => {
-                            resolve(reqObj.status);
-                            console.log("Email success");
-                        },
-                        error: (reqObj: any) => {
-                            reject(reqObj);
-                            console.log("Email failure: " + "\n  HTTP Status: " + reqObj.status + "\n  Message: " + reqObj.responseJSON.error.message.value);
-                        }
-                    });
-                },
-                error: function(responseObj: any) {
-                    // this = request object
-                    alert("ERROR!\n\n" + "Contact the developer with this error message below\n\n" + "URL: " + this.url + "\n" + "Message: " +
-                            responseObj.name + ": " + responseObj.message);
-                }
-            });
-        });
-    }
+	/** @method .sendEmail
+* @param {object} properties should include {From:, To:, CC:, BCC:, Subject:, Body:}
+*/
+	sendEmail (headers: IEmailHeaders) : Promise<TSPResponseData> {
+		return new Promise((resolve, reject) => {
+			let To: string,
+				CC: string | null,
+				BCC: string | null,
+				From: string,
+				Subject: string,
+				Body:string,
+				uri: string = this.server;
+
+			if (!headers.To)
+				reject({status: 0, error: { message: { value:
+               "Object arg to SPUtilityEmailService.sendEmail() method must include .To: property" }}});
+			if (!headers.Subject)
+				reject({status: 0, error: { message: { value:
+               "Object arg to SPUtilityEmailService.sendEmail() method must include defined .Subject: property" }}});
+			if (!headers.Body)
+				reject({status: 0, error: { message: { value:
+            "Object arg to SPUtilityEmailService.sendEmail() method must include defined .Body: property" }}});
+			window.onerror = null;
+			To = this.structureMultipleAddresses(headers.To);
+			CC = headers.CC ? this.structureMultipleAddresses(headers.CC) : "";
+			BCC = headers.BCC ? this.structureMultipleAddresses(headers.BCC) : "";
+			From = headers.From ? headers.From.replace(/"/g, "\\\"") : "";
+			From = From.replace(/'/g, "\\'");
+			To = To.replace(/"/g, "\\\"");
+			To = To.replace(/'/g, "\\'");
+			CC = CC.replace(/"/g, "\\\"");
+			CC = CC.replace(/'/g, "\\'");
+			BCC = BCC.replace(/"/g, "\\\"");
+			BCC = BCC.replace(/'/g, "\\'");
+			Subject = headers.Subject.replace(/"/g, "\\\"");
+			Subject = Subject.replace(/'/g, "\\'");
+			Body = headers.Body.replace(/\\/g, "\\\\");
+			Body = Body.replace(/"/g, "\\\"");
+			Body = Body.replace(/'/g, "\\'");
+			if (this.site && this.site.length > 0)
+				uri = uri + (this.site.charAt(0) == "/" ? "" : "/") + this.site;
+			RESTrequest({
+				url: uri + "/_api/contextinfo",
+				method: "POST",
+				successCallback: (responseJSON: TSPResponseData) => {
+					const digValue = responseJSON!.d!.GetContextWebInformation!.FormDigestValue;
+					// the actual transmission
+					RESTrequest({
+						url: uri + "/_api/SP.Utilities.Utility.SendEmail",
+						method: "POST",
+						headers: {
+							...SPstdHeaders,
+							"X-RequestDigest": digValue
+						},
+						body: JSON.stringify({
+							properties : {
+								__metadata: { type: "SP.Utilities.EmailProperties" },
+								To: { results : [  To  ] },
+								CC: { results : [  CC  ] },
+								BCC: { results : [ BCC ] },
+								From: From,
+								Subject: Subject,
+								Body: Body
+							}
+						}),
+						successCallback: (data: TSPResponseData) => {
+							resolve(data);
+						},
+						errorCallback: (errInfo, /* httpInfo */) => {
+							reject(errInfo);
+						}
+					});
+				},
+				errorCallback: (errInfo, /* httpInfo */) => {
+					reject(errInfo);
+				}
+			});
+		});
+	}
 }
 
 // parameters should be object with following acceptable properties
-//   .server : this is required to establish the service unless SERVER_NAME defined
-//   .site : optional site part of URL unless SITE_NAME is defined
+//   .server : this is required to establish the service unless InitSettings.SERVER_NAME defined
+//   .site : optional site part of URL unless SITE_PATH is defined
 //   .errorObj : should be the response object from a jQuery AJAX call
 //   .subject : string for the subject header of email message
 //   .body : string allowed to contain HTML markup for email message body
@@ -155,43 +161,42 @@ class SPUtilityEmailService {
 //   .To : To addressee; optional if the global constant
 //           DEVELOPER_MAIL_ADDRESS is defined with proper email address
 
-function emailDeveloper(parameters : {
-    server: string;
-    site: string;
-    errorObj?: object;
-    To: string;
+
+function emailDeveloper(parameters: {
     subject: string;
     body: string;
+    server?: string;
+    site?: string;
+    To?: string;
     CC?: string | null;
     Cc?: string | null;
     head?: string;
-}): Promise<any> {
-    return new Promise((resolve, reject) => {
-        let emailService: SPUtilityEmailService,
-        bodyStart: string,
-        bodyEnd: string;
+    errorObj?: object;
+}): Promise<TSPResponseData> {
+	return new Promise((resolve, reject) => {
+		let bodyStart: string;
 
-        if (!parameters.server) throw "Cannot emailDeveloper() with having a defined server name";
-        emailService = new SPUtilityEmailService({
-            server: parameters.server,
-            site: parameters.site as string
-        });
-        bodyStart = "<html><head>";
-        if (parameters.head) bodyStart += parameters.head;
-        bodyStart += "</head><body>";
-        bodyEnd = "</body></html>";
-        emailService.sendEmail({
-            From: "",
-            To: parameters.To as string,
-            Subject: parameters.subject,
-            Body: bodyStart + parameters.body + bodyEnd,
-            CC: parameters.CC ? parameters.CC : (parameters.Cc ? parameters.Cc : null)
-        }).then((response) => {
-            resolve(response);
-        }).catch((response) => {
-            reject(response);
-        });;
-    });
+		if (!parameters.server) throw "Cannot emailDeveloper() with having a defined server name";
+		const emailService = new SPUtilityEmailService({
+			server: parameters.server,
+			site: parameters.site as string
+		});
+		bodyStart = "<html><head>";
+		if (parameters.head) bodyStart += parameters.head;
+		bodyStart += "</head><body>";
+		const bodyEnd = "</body></html>";
+		emailService.sendEmail({
+			From: "",
+			To: parameters.To as string,
+			Subject: parameters.subject,
+			Body: bodyStart + parameters.body + bodyEnd,
+			CC: parameters.CC ? parameters.CC : (parameters.Cc ? parameters.Cc : null)
+		}).then((response: TSPResponseData) => {
+			resolve(response);
+		}).catch((error) => {
+			reject(error);
+		});
+	});
 }
 
 /*/
@@ -202,8 +207,8 @@ function emailUser(parameters: {
     CC?: string;
 }): void {
     var emailService = new SPUtilityEmailService({
-            server: SERVER_NAME,
-            site: SITE_NAME
+            server: InitSettings.SERVER_NAME,
+            site: SITE_PATH
         }),
         bodyStart = "<div style=\"font:normal 11pt Verdana,sans-serif;\">",
         bodyEnd = "</div>";
@@ -229,8 +234,8 @@ function emailHttpErrors(restRequest, config, itemId): void {
     for (prop in headers) body += "<li>'" + prop + "': '" + headers[prop] + "'</li>";
     body += "</ul></li>" + "<li>Body:<br />" + restRequest.getRequestBody() + "</li>" + "<li>Status: " + restRequest.getResponseStatus() + "</li>" + "<li>Response Text: <br />" + restRequest.getResponseText() + "</li></ul>";
     emailService = emailService = new SPUtilityEmailService({
-        server: CatCONST.SERVER_NAME,
-        site: CatCONST.SITE_NAME
+        server: CatCONST.InitSettings.SERVER_NAME,
+        site: CatCONST.SITE_PATH
     });
     emailService.sendEmail({
         To: CatCONST.DEVELOPER_EMAIL_ADDRESS,

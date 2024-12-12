@@ -1,0 +1,134 @@
+﻿This should be a guide to the gulpfile.config.json object and properties.
+Gulp starts with a task argument in the command line: 'gulp <task-name>'
+If there is no task-name, the task default is 'default'.
+
+This configuration file is not a feature of the Gulp system as composed by
+its creators. A gulpfile is supposed to contain all the hard coding to
+configure the file and not rely on external configuration data as a supplement
+in non-coding file form.
+
+It is more organized for the gulpfile to have a JSON config itself to define
+its parameters. This config must not define any parameters that would be defined
+for TypeScript compilation that would go into a `tsconfig.json` file. This exists
+only for hard-coded stuff that would go in a gulpfile and pulls it out.
+
+Development stages:
+
+1. source & config building: ts, css, json
+2. compilation to './js' ts -> js
+3. move ("rename") to test:
+		  file moves to ./test
+		    root: html/aspx, ./js: js + js.map, ./css: css only, ./img: all images
+		  html/aspx file edits
+		    a) <script> to js file checks, type=module? defer/async?
+			 b) <link> to css
+4. move ("rename") to prod/release:
+		  file moves
+		    root: html/aspx, ./js: js only, ./css: css only, ./img: all images
+		  html/aspx file edits
+		    a) <script> to js file checks, type=module? defer/async?
+			 b) <link> to css
+		  packaging? bundle? minify?
+
+
+{
+	"configNames": [ "configName1", "configName2", ...]
+			// {string[]}  config names in the JSON file
+	"base": {
+		"projectRoot": path to project root,
+						// the entry point for a browser web page/app
+		"browserLoadPage": "agendaMaker.aspx",
+	}
+	"<config-name>": {
+				// "chdir"?: "", Not need. Use relative or absolute from project root
+		"tsconfig": {
+			// path to named tsconfig.json file. If relative path, then
+			// relative to project root. If null, the default path is
+			//  ${projectRoot}/tsconfig.json
+			"path": string | null
+			// most every option should be part of JSON file itself
+		}
+		"src": {
+			// this property will be part of a move/rename of files during
+			   the build of the dev stage after TS compiliation
+			// for workingPathIndex, use -1 for current dir
+			"path": "./js/**/{*.js,*.js.map}",
+			"pathException": "./js/**/*.{!(js|js.map)}"
+		},
+		"dest": {
+			// This will be attached by pipe to whatever operation is using src()
+			"path": "./js"
+		},
+	/* disused
+		"workingPaths": {
+			"paths": [
+				"D:/dev/_Test"
+			],
+			"index": -1
+		},  */
+		"html": {
+			"path": "${projectRoot}/html/entryPoint.html", // path to the html file (the entry point), relative or absolute
+			"subfolderPaths": {
+				"JS": "./js",
+				"CSS": "./css",
+				"SPREST": "" or "/SPREST"  in case subfolders to main folder are desired
+				"Agenda": "" or "/Agenda"
+			}
+			"links": [  array of string (just href) or object
+				may have "${<sub>}"
+			],
+			"scripts": [  array of string (just src) or object
+				may have "${<sub>}"
+			]
+			"replace": [
+				{
+					"fromPattern": "",
+					"toText": ""
+				}
+			],
+			/* [{ "insertion": "head", "domDef": [{"elem":"script", "attribs": [
+						{"name": "src", "value": "path/to/jsfile.js"},
+						{"name": "type", "value": "module"}
+					] }] }] 	*/
+			"add": [{
+				"insertionPoint": "head",
+				"insertionText":
+
+			}],
+					// an array of strings with exact matches of text to delete
+			"del": []
+		},
+		"otherJSfiles": [
+			"D:/dev/GenLib/src/html-docx.js"
+		],
+		"cleanup": [{
+			"path": "./js",
+			"filter": "^(?:(?!\\.js$|\\.js\\.map$|\\.tsbuildinfo$).)*$",
+			"recursive": true,
+			"preview": true
+		}],
+		// name of an optional text file to log gulpfile action. Placed in project root
+		"outputReportPath"?: "GulpfileProcessingReport.txt",
+				/* flags are only advisory: these must be set for starting the gulpfile
+					so their presence should be copied for the separate invocation */
+		"flags": [  {string[]} of flags
+			"--verbose",
+			"--force"
+		],
+
+	}
+}
+
+/*
+
+const dirPatterns: {
+	dir: string;
+	ext?: RegExp
+}[] = [
+	{
+		dir: "D:/CloudSites/California Department of Water Resources/Change Advisory Board - Site Assets/DEV/js",
+		ext: /^[^.]+\.(?!(js|js\.map)$)([^.]+$)/
+	}
+];
+
+*/

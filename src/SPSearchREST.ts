@@ -1,10 +1,26 @@
 "use strict";
 
+
+import type {
+		THttpRequestHeaders
+//		THttpRequestParams,
+//		TSPResponseData,
+//		THttpRequestParamsWithPromise,
+//		TXmlHttpRequestData
+} from './SPHttp';
+
+import {
+	RESTrequest
+} from './SPHttpReqResp';
+
+export { SPSearchREST };
+
 /**
  *
  * @class  representing parameters to establish interface with a site
  *             {server: name of location.host, site: path to site}
  */
+// export
 class SPSearchREST {
 	server: string;
 	apiPrefix: string;
@@ -14,12 +30,13 @@ class SPSearchREST {
 	};
 
 	constructor(server: string) {
-	   if (!server || typeof server != "string")
+		if (!server || typeof server != "string")
 			throw "Use of SPSearchREST() constructor must include string parameter specifying URL to server";
 		this.server = server;
-   	this.apiPrefix = this.server + "/_api";
+		this.apiPrefix = this.server + "/_api";
 	}
 	// if parameters.success not found the request will be SYNCHRONOUS and not ASYNC
+	/*
 	static httpRequest(elements:THttpRequestParams) {
 		if (elements.setDigest && elements.setDigest == true) {
 			let match = elements.url.match(/(.*\/_api)/);
@@ -68,7 +85,7 @@ class SPSearchREST {
 				data: elements.body ?? elements.data as string,
 				success: (data: TSPResponseData, status: string, requestObj: JQueryXHR) => {
 					if (data.d && data.__next)
-					RequestAgain(
+						RequestAgain(
 							elements,
 							data.__next,
 							data.d.results!
@@ -104,7 +121,7 @@ class SPSearchREST {
 			});
 		});
 	}
-
+*/
    queryText(parameters: {
 		query?: string;
 		querytext?: string;
@@ -115,8 +132,16 @@ class SPSearchREST {
          querytext = "?querytext='" + parameters.query + "'";
       else if (parameters.querytext)
          querytext = "?querytext='" + parameters.querytext + "'";
-      return SPSearchREST.httpRequestPromise({
-         url: this.apiPrefix + "/search/query" + querytext
-      });
+		return new Promise((resolve, reject) => {
+			RESTrequest({
+				url: this.apiPrefix + "/search/query" + querytext,
+				successCallback: (data /*, httpInfo*/) => {
+					resolve(data);
+				},
+				errorCallback: (errInfo /*, httpInfo*/) => {
+					reject(errInfo)
+				}
+			});
+		});
    }
 }

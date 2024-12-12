@@ -1,6 +1,42 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use strict";
 
 /* jshint -W119, -W069, -W083 */
+
+import {
+	TLookupFieldInfo,
+	TListSetup,
+	TSpListItem,
+	TSiteInfo,
+	TSpField,
+	//	THttpRequestParams,
+	//	THttpRequestParamsWithPromise,
+	TSPDocLibCheckInType,
+	//		IBatchHTTPRequestParams,
+	SPListRaw,
+	SPListItemRaw,
+	SPContentTypeRaw,
+	SPFileRaw,
+	SPFieldRaw,
+	SPRootFolderRaw
+} from "./SPComponentTypes.d";
+import { RESTrequest, batchRequestingQueue, SPstdHeaders } from "./SPHttpReqResp";
+import { THttpRequestBody, TSPResponseData, TIntervalControl, HttpInfo,
+	TXmlHttpRequestData, TFetchInfo, IBatchHTTPRequestForm, TArrayToJSON, HttpStatusCode
+} from "./SPHttp";
+import { SPSiteREST } from "./SPSiteREST";
+import {
+	isIterable,
+	ParseSPUrl,
+	constructQueryParameters,
+//	formatRESTBody,
+	serialSPProcessing,
+	checkEntityTypeProperty,
+	createGuid
+} from "./SPRESTSupportLib";
+
+export { SPListREST };
 
 /***************************************************************
  *  Basic interface
@@ -13,6 +49,7 @@
 /**
  * @class SPListREST  -- constructor for interface to making REST request for SP Lists
  */
+
 class SPListREST {
 	protocol: string;
 	server: string;
@@ -23,14 +60,14 @@ class SPListREST {
 	baseUrl: string = "";
 	serverRelativeUrl: string = "";
 	creationDate: Date = new Date(0);
-	baseTemplate: string = "";
+	baseTemplate: number = -1;
 	allowContentTypes: boolean = Boolean(null);
 	itemCount: number = -1;
 	listItemEntityTypeFullName: string = "";
 	rootFolder: string = "";
 	contentTypes: object = {};
 	listIds: number[] = [];
-	fields: any[] = [];
+	fields: TSpField[] = [];
 	fieldInfo: any[] = [];
 	lookupFieldInfo: TLookupFieldInfo[] = [];
 	lookupInfoCached: boolean = Boolean(null);
@@ -39,11 +76,6 @@ class SPListREST {
 	setup: TListSetup;
 	sitePedigree: TSiteInfo = {} as TSiteInfo;
 	arrayPedigree: TSiteInfo[] = [];
-
-	static stdHeaders: THttpRequestHeaders = {
-		"Accept": "application/json;odata=verbose",
-		"Content-Type": "application/json;odata=verbose"
-	};
 
 	/**
 	 * @constructor
@@ -79,64 +111,74 @@ class SPListREST {
 			this.listName = setup.listName;
 		else if (setup.listGuid)
 			this.listGuid = setup.listGuid;
-		if (this.listGuid && (matches = this.listGuid.match(/\{?([\d\w\-]+)\}?/)) != null)
+		if (this.listGuid && (matches = this.listGuid.match(/\{?([\d\w-]+)\}?/)) != null)
 			this.listGuid = matches[1];
 		if (!(this.listName || this.listGuid))
 			throw "Neither a list name or list GUID were provided to identify a list";
 		this.setup = setup;
 		this.forApiPrefix = this.protocol + this.server + this.site + "/_api";
-/*
+		/*
 		if (setup.linkToDocumentContentTypeId)
 			this.linkToDocumentContentTypeId = setup.linkToDocumentContentTypeId; */
 	}
 	static escapeApostrophe (string: string): string {
-		return encodeURIComponent(string).replace(/'/g, '\'\'');
-	};
+		return encodeURIComponent(string).replace(/'/g, "''");
+	}
 
 	/**
 	 * @method _init -- sets many list characteristics whose data is required
 	 * 	by asynchronous request
 	 * @returns Promise
 	 */
-	init() {
+	init(): Promise<boolean> {
 		return new Promise((resolve, reject) => {
-			$.ajax({
-				url:  this.forApiPrefix + "/web/lists" +
+			RESTrequest({
+				url: this.forApiPrefix + "/_api/web/lists" +
 					(this.listName ? "/getByTitle('" + this.listName + "')" :
-					"(guid'" + this.listGuid + "')") +
+						"(guid'" + this.listGuid + "')") +
 					"?$expand=RootFolder,ContentTypes,Fields" +
 					(this.setup && this.setup.include ? "," + this.setup.include : ""),
 				method: "GET",
-				headers: SPListREST.stdHeaders,
-				success: (data) => {
-					let loopData: any[],
-						lookupFieldTypeNum = SPFieldTypes.getFieldTypeIdFromTypeName("Lookup");
+				successCallback: (data/*, text, reqObj */) => {
+					let loopData: unknown[];
+					//	lookupFieldTypeNum = SPFieldTypes.getFieldTypeIdFromTypeName("Lookup");
 
-					data = data.d;
+
+					const d: SPListRaw = data.d as SPListRaw;
 					this.baseUrl = this.server + this.site;
-					this.serverRelativeUrl = data.RootFolder.ServerRelativeUrl;
-					this.creationDate = data.Created;
-					this.baseTemplate = data.BaseTemplate;
-					this.allowContentTypes = data.AllowContentTypes;
-					this.listGuid = data.Id;
-					this.listName = data.Title;
-					this.itemCount = data.ItemCount;
-					this.listItemEntityTypeFullName = data.ListItemEntityTypeFullName;
-					this.rootFolder = data.RootFolder;
-					this.contentTypes = data.ContentTypes.results;
-					this.fields = data.Fields.results;
+					this.serverRelativeUrl = (d.RootFolder as SPRootFolderRaw).ServerRelativeUrl;
+					this.creationDate = new Date(d.Created);
+					this.baseTemplate = d.BaseTemplate;
+					this.allowContentTypes = d.AllowContentTypes;
+					this.listGuid = d.Id;
+					this.listName = d.Title;
+					this.itemCount = d.ItemCount;
+					this.listItemEntityTypeFullName = d.ListItemEntityTypeFullName;
+					this.rootFolder = (d.RootFolder as SPRootFolderRaw).Name;
+					this.contentTypes = d.ContentTypes.results;
+					this.fields = d.Fields.results.map((elem: any) => {
+						const field: TSpField = {} as TSpField;
+						for (const fieldProp in field)
+							if (fieldProp in elem)
+								(field as any)[fieldProp] = elem[fieldProp];
+						return field;
+					});
 					if (this.setup.include) {
-						let components: string[] = this.setup.include.split(",");
+						const components: string[] = this.setup.include.split(",");
 
-						for (let component of components)
+						for (const component of components)
 							//this[component] = data[component];
-							Object.defineProperty(this, data[component], component);
+							Object.defineProperty(this, (d as any)[component], component);
 					}
-							// for doc libs, look for "Link To Document" content type and store its content type ID
+					// for doc libs, look for "Link To Document" content type and store its content type ID
 					// one more trip to the network to get any lookup field information
-					this.getLookupFieldsInfo().then((response) => {
-						if (isIterable(loopData = data.ContentTypes.results) == true) {
-							let i;
+					this.getLookupFieldsInfo().then(() => {
+						if (//
+
+							isIterable(loopData = d.ContentTypes.results) == true) {
+							let i: number,
+
+								loopData: any;
 
 							for (i = 0; i < loopData.length; i++)
 								if (loopData[i].Name == "Link to a Document")
@@ -145,11 +187,12 @@ class SPListREST {
 								this.linkToDocumentContentTypeId = loopData[i].Id.StringValue;
 						}
 						resolve(true);
-					}).catch((response) => {
-						reject("List info error\n" + JSON.stringify(response, null, "  "));
+					}).catch((err: unknown) => {
+						reject("List info error\n" + JSON.stringify(err, null, "  "));
 					});
+
 				},
-				error: (reqObj) => {
+				errorCallback: (reqObj/*, status, errThrown */) => {
 					reject("List info error\n" + JSON.stringify(reqObj, null, "  "));
 				}
 			});
@@ -161,82 +204,85 @@ class SPListREST {
 	 * 		THIS FUNCTION MAY NEED DEBUGGING
 	 * @returns
 	 */
-	getLookupFieldsInfo() {
-		return new Promise((resolve, reject) => {
-	// first get the site pedigree of current site
-			let siteREST = new SPSiteREST({
+	getLookupFieldsInfo(): Promise<boolean> {
+		return new Promise<boolean>((resolve, reject) => {
+			// first get the site pedigree of current site
+			const siteREST = new SPSiteREST({
 				server: this.server,
 				site: this.site
 			});
 			siteREST.init().then(() => {
-				siteREST.getSitePedigree(null).then(({pedigree, arrayPedigree}) => {
-	// after site pedigree, collect the lookup fields and lists as
-					let lookupFields: any[] = [],
-						requests: Promise<any>[] = [];
+				siteREST.getSitePedigree(null).then(
+					({pedigree: pedigree, arrayPedigree: arrayPedigree}) => {
+						// after site pedigree, collect the lookup fields and lists as
+						const lookupFields: TLookupFieldInfo[] = [],
+							requests: Promise<unknown>[] = [];
 
-					this.sitePedigree = pedigree;
-					this.arrayPedigree = arrayPedigree;
-					for (let field of this.fields)
-						if (field.FieldTypeKind == 7 && field.FromBaseType == false) // lookup type, so get the data
-							lookupFields.push(field);
+						this.sitePedigree = pedigree;
+						this.arrayPedigree = arrayPedigree;
+						for (const field of this.fields)
+							if (field.FieldTypeKind == 7 && field.FromBaseType == false) // lookup type, so get the data
+								lookupFields.push(field as unknown as TLookupFieldInfo);
 
-					for (let field of lookupFields)
-						requests.push(this.retrieveLookupFieldInfo({
-							useFunction: "siteREST",
-							LookupWebId: field.LookupWebId,
-							LookupList: field.LookupList,
-							LookupField: field.LookupField
-						}));
+						for (const field of lookupFields)
+							requests.push(this.retrieveLookupFieldInfo({
+								useFunction: "siteREST",
+								LookupWebId: field.SPproperties.LookupWebId,
+								LookupList: field.SPproperties.LookupList,
+								LookupField: field.SPproperties.LookupField
+							}));
 
-					Promise.all(requests).then((responses) => {
+
+						Promise.all(requests).then((responses: any) => {
 						//console.log("responses count = " + responses.length + "\n" +
 						//	JSON.stringify(responses, null, "  "));
-						for (let i of responses) {
-							let data: any[] = i.data,
-									fld: any,
-									choices: {id: number; value: string }[] = [],
-									idx: number;
+							for (const i of responses) {
 
-							if (Array.isArray(data) == false)
-								continue;
-							found1:
-							for (let i = 0; i < lookupFields.length; i++)
-								for (let datum of data)
-									if (datum[lookupFields[i].LookupField] != null) {
-										fld = lookupFields.splice(i, 1)[0];
-										break found1;
-									}
-							idx = this.lookupFieldInfo.push({
-								fieldDisplayName: fld.Title,
-								fieldInternalName: fld.InternalName,
-								fieldLookupFieldName: fld.LookupField,
-								choices: null
-							}) - 1;
-							for (let fldVal of data) {
-								if (fldVal[fld.LookupField] == null)
-									break;
-								choices.push({
-									id: fldVal.Id,
-									value: fldVal[fld.LookupField]
-								});
+								const data: any[] = i.data,
+									choices: {id: number; value: string }[] = [];
+
+								let fld: any;
+
+								if (Array.isArray(data) == false)
+									continue;
+								found1:
+								for (let i = 0; i < lookupFields.length; i++)
+									for (const datum of data)
+										if (datum[lookupFields[i].SPproperties.LookupField] != null) {
+											fld = lookupFields.splice(i, 1)[0];
+											break found1;
+										}
+								const idx = this.lookupFieldInfo.push({
+									fieldDisplayName: fld.Title,
+									fieldInternalName: fld.InternalName,
+									fieldLookupFieldName: fld.LookupField,
+									choices: null
+								} as TLookupFieldInfo) - 1;
+								for (const fldVal of data) {
+									if (fldVal[fld.LookupField] == null)
+										break;
+									choices.push({
+										id: fldVal.Id,
+										value: fldVal[fld.LookupField]
+									});
+								}
+								this.lookupFieldInfo[idx].choices = choices;
 							}
-							this.lookupFieldInfo[idx].choices = choices;
-						}
-						resolve(true);
-					}).catch((response) => {
-						reject(response);
-					});
+							resolve(true);
+						}).catch((err: unknown) => {
+							reject(err);
+						});
 
-				}).catch((response) => {
-					reject(response);
+					}).catch((err: unknown) => {
+					reject(err);
 				});
-			}).catch((response) => {
-				reject(response);
+			}).catch((err: unknown) => {
+				reject(err);
 			});
 		});
 	}
 
-/**
+	/**
  * @method retrieveLookupFieldInfo -- Promise to return choices for a lookup value
  * @param {object
  * 		.useFunction: {string}  "search" (default)|"enumWebs"
@@ -251,70 +297,73 @@ class SPListREST {
 		LookupWebId: string;
 		LookupList: string;
 		LookupField: string;
-	}): Promise<any> {
+	}): Promise<unknown> {
 		return new Promise((resolve, reject) => {
 			if (parameters.useFunction == "siteREST") {
-				let site: TSiteInfo = {} as TSiteInfo,
-					lookupListId = parameters.LookupList.replace(/[{}]/g, "");
+				let site: TSiteInfo = {} as TSiteInfo;
+				const lookupListId = parameters.LookupList.replace(/[{}]/g, "");
 
 				for (site of this.arrayPedigree)
 					if (site.Id == parameters.LookupWebId)
 						break;
-				SPListREST.httpRequestPromise({
+				RESTrequest({
 					url: this.protocol + this.server + site.ServerRelativeUrl + "/_api/lists(guid'" +
 							lookupListId + "')/items?$select=Id," + parameters.LookupField,
-					ignore: [ 404 ]
-				}).then((response) => {
-					resolve(response);
-				}).catch((response) => {
-					reject(response);
+					successCallback: (data, httpInfo) => {
+						resolve(data);
+					},
+					errorCallback: (err, httpInfo) => {
+						reject(err);
+					}
 				});
-
 			} else if (parameters.useFunction == "SPSearch") // no useFunction specified
-				$.ajax({  // use SharePoint's search query tool
-					// search for the web id
-					url: this.forApiPrefix + "/search/query?querytext=guid'" + parameters.LookupWebId + "'",
-					method: "GET",
-					headers: SPListREST.stdHeaders,
-					success: (data) => {
-						// the data returned are the lookup choice values in the target
+				RESTrequest({
+					url: this.forApiPrefix + "/_api/search/query?querytext=guid'" + parameters.LookupWebId + "'",
+					successCallback: (data, httpInfo) => {
+					// the data returned are the lookup choice values in the target
+						const d = data.d;
 						let siteName,
 							lookupList,
-							siteResult = null,
-							lookupChoices: {
-								id: string;  // item.Id
-								choiceValue: string  // item[parameters.LookupField]
-							}[] = [],
-								searchRows = data.d.query.PrimaryQueryResult.RelevantResults.Table.Rows.results,
-								// this variabled function will get the choices from the lookup field
-								collectItemData = (url: string) => {
-									// this named function will be used
-									$.ajax({
-										url: url,
-										method: "GET",
-										headers: SPListREST.stdHeaders,
-										success: (data) => {
-											for (let item of data.d.results)
-												lookupChoices.push({
-													id: item.Id,
-													choiceValue: item[parameters.LookupField]
-												});
-											if (data.d.__next)
-												collectItemData(data.d.__next);
-											else
-												resolve(lookupChoices);
-										},
-										error: (reqObj) => {
-											reject(reqObj);
-										}
-									});
-								};
+							siteResult = null;
+						const lookupChoices: {
+							id: string;  // item.Id
+							choiceValue: string  // item[parameters.LookupField]
+						}[] = [],
+
+							searchRows = (d!.query as any)!.PrimaryQueryResult.RelevantResults.Table.Rows.results,
+							// this variabled function will get the choices from the lookup field
+							collectItemData = (url: string) => {
+							// this named function will be used
+								RESTrequest({
+									url: url,
+									successCallback: (data, httpInfo) => {
+										const d = data.d;
+
+										for (const item of d!.results!)
+											lookupChoices.push({
+
+												id: (item as any).Id,
+
+												choiceValue: (item as any)[parameters.LookupField]
+											});
+										if (d!.__next)
+											collectItemData(d!.__next);
+										else
+											resolve(lookupChoices);
+
+									},
+									errorCallback: (err, info) => {
+										reject(err);
+
+									}
+								});
+							};
 						// This complex multiple loop is trying to find the results in the complex response
 						//   of the SharePoint search query
-						for (let searchRow of searchRows) {
-							for (let searchCell of searchRow.Cells.results) {
+						for (const searchRow of searchRows) {
+							for (const searchCell of searchRow.Cells.results) {
 								if (searchCell.Key == "WebId" && searchCell.Value == parameters.LookupWebId) {
-									for (let searchCell2 of searchRow.Cells.results)
+									for (const searchCell2 of searchRow.Cells.results)
 										if (searchCell2.Key == "SPWebUrl") {
 											siteResult = searchCell2.Value;
 											break;
@@ -328,14 +377,15 @@ class SPListREST {
 						}
 						// if the loop found the result and set it, this condition is ready
 						if (siteResult != null) {
-							siteName = ParseSPUrl(siteResult)!.siteFullPath;
-							lookupList = parameters.LookupList.match(/^\{?([^\}]+)\}?$/)![1];
+							siteName = //
+						ParseSPUrl(siteResult)!.siteFullPath;
+							lookupList = parameters.LookupList.match(/^\{?([^}]+)\}?$/)![1];
 							collectItemData(this.protocol + this.server + siteName + "/_api/web/lists(guid'" + lookupList +
-										"')/items?$select=Id," + parameters.LookupField);
+								"')/items?$select=Id," + parameters.LookupField);
 						}
 						resolve(null); // could not find a result in search
 					},
-					error: () => {
+					errorCallback: (err, info) => {
 						reject("REST Search request failed");
 					}
 				});
@@ -347,7 +397,7 @@ class SPListREST {
 		internalName?: string;
 		lookupFieldName?: string;
 	}): TLookupFieldInfo | null {
-		for (let fldInfo of this.lookupFieldInfo)
+		for (const fldInfo of this.lookupFieldInfo)
 			if (parameters.displayName && parameters.displayName == fldInfo.fieldDisplayName)
 				return fldInfo;
 			else if (parameters.internalName && parameters.internalName == fldInfo.fieldInternalName)
@@ -362,8 +412,11 @@ class SPListREST {
 	 * @param {string} fieldName --
 	 * @returns the value to set for the lookup field, null if not available
 	 */
-	getLookupFieldValue(fieldName: string, fieldValue: string): number | null {
-		for (let info of this.lookupFieldInfo)
+	getLookupFieldValue(
+		fieldName: string,
+		fieldValue: string
+	): number | null {
+		for (const info of this.lookupFieldInfo)
 			if (info.fieldDisplayName == fieldName)
 				for (let i: number = 0; i < info.choices!.length; i++)
 					if (fieldValue == info.choices![i].value)
@@ -377,35 +430,37 @@ class SPListREST {
 	 * @param {object} body -- usually the XMLHTTP request body passed to a POST-type request
 	 * @returns -- a Promise (this is an async call)
 	 */
-	fixBodyForSpecialFields(body: THttpRequestBody) {
-		let newBody: {[key:string]: any},
-				value: number | null;
+	fixBodyForSpecialFields(body: THttpRequestBody): Promise<unknown> {
+		let newBody: {[key:string]: unknown},
+			value: number | null;
 
 		return new Promise((resolve, reject) => {
 			if (this.lookupInfoCached == true) {
-// this is a quick way to get lookup value without going back to the server
+				// this is a quick way to get lookup value without going back to the server
 				newBody = { };
-				for (let key in body)
-					if ((value = this.getLookupFieldValue(key, body[key])) == body[key])
+				for (const key in body)
+					if ((value = this.getLookupFieldValue(key, body[key] as string)) == body[key])
 						newBody[key] = value;
 					else
 						newBody[key + "Id"] = value;
 				resolve(newBody);
 			} else
-// with this block, we go to the server to get lookup values
+			// with this block, we go to the server to get lookup values
 				this.getFields({
 					filter: "FromBaseType eq false"
+
 				}).then((response: any) => {
-					let requests = [ ];
+
+					const requests: any = [ ];
 
 					// get the lists fields and store the info
 					if (this.fields)
 						this.fields.concat(response.data.d.results);
 					else
 						this.fields = response.data.d.results;
-					this.fieldInfo = [ ];
+					//this.fieldInfo = [ ];
 					// this will be multiple requests, so find Promise.all()
-					for (let fld of response.data.d.results)
+					for (const fld of response.data.d.results)
 						requests.push(new Promise((resolve, reject) => {
 							// lookup type field
 							if (fld.FieldTypeKind == 7 && typeof fld.LookupWebId == "string" &&
@@ -415,15 +470,16 @@ class SPListREST {
 									LookupWebId: fld.LookupWebId,
 									LookupList: fld.LookupList,
 									LookupField: fld.LookupField
-								}).then((response: any) => {
+
+								}).then(response => {
 									this.lookupFieldInfo.push({
 										fieldDisplayName: fld.Title,
 										fieldInternalName: fld.InternalName,
 										fieldLookupFieldName: fld.LookupField,
 										choices: response
-									});
-								}).catch((response) => {
-									reject(response);
+									} as TLookupFieldInfo);
+								}).catch((err: unknown) => {
+									reject(err);
 								});
 							// multi-choice field (not lookup)
 							} else if (fld.FieldTypeKind == 15) { // multi-choice field
@@ -443,36 +499,36 @@ class SPListREST {
 						// build the body from stored lookup fields, if they exist
 						newBody = { };
 
-						for (let key in body)
+						for (const key in body)
 							if (Array.isArray(body[key])) {
-								for (let fld of this.fields)
+								for (const fld of this.fields)
 									if (fld.InternalName == key) {
 										newBody[key] = {
 											__metadata: {
-												type: fld.Choices.__metadata.type
+												type: fld.Choices!.__metadata.type
 											},
 											results: body[key]
 										};
 										break;
 									}
 							} else if (typeof body[key] == "boolean" ||
-										(typeof body[key] == "string" && body[key].search(/Y|Yes|No|N|true|false/i) == 0)) {
-								for (let fld of this.fieldInfo)
+										(typeof body[key] == "string" && (body[key] as string).search(/Y|Yes|No|N|true|false/i) == 0)) {
+								for (const fld of this.fieldInfo)
 									if (fld.intName == key)
 										if (fld.boolean)
-											if (body[key] == true || body[key].search(/Y|Yes|true/i) == 0)
+											if (body[key] == true || (body[key] as string).search(/Y|Yes|true/i) == 0)
 												newBody[key] = true;
 											else
 												newBody[key] = false;
 										else
 											newBody[key] = body[key];
-							} else if ((value = this.getLookupFieldValue(key, body[key])) == body[key])
+							} else if ((value = this.getLookupFieldValue(key, body[key] as string)) == body[key])
 								newBody[key] = value; // this is the case
 							else
 								newBody[key + "Id"] = value;
 						resolve(newBody);
-					}).catch((response) => {
-						reject(response);
+					}).catch((err: unknown) => {
+						reject(err);
 					});
 				}).catch(() => {
 					reject(".getFields() called failed");
@@ -480,193 +536,30 @@ class SPListREST {
 		});
 	}
 
-	// if parameters.success not found the request will be SYNCHRONOUS and not ASYNC
-	/**
-	 * @method httpRequest -- this is a static method
-	 * @param {ThttpRequestParams} elements
-	 * 	this object contains several properties crucial to setting up a JQuery ajax() call:
-	 * 		url, method, success, error, headers, data
-	 *    it also contains a property 'progressReport' which is object with properties 'interval' (type number)
-	 * 		and 'callback' (type (number) => void). This is intended for network request that might take
-	 * 		a long time with several results cycles. interval is the count of results collected, and
-	 * 		the callback is to a function so that an update in the callback can be done.
-	 * @returns {JQueryXHR}  standard JQuery ajax() return type
-	 */
-	static httpRequest(elements: THttpRequestParams): JQueryXHR {
-		let intervalControl: TIntervalControl;
-		if (!elements.successCallback)
-			throw "HTTP Request for SPListREST requires defining 'successCallback' in parameter 'elements'";
-		if (!elements.errorCallback)
-			throw "HTTP Request for SPListREST requires defining 'errorCallback' in parameter 'elements'";
-		if (typeof elements.headers == "undefined")
-			elements.headers = SPListREST.stdHeaders;
-		else {
-			if (!elements.headers["Accept"])
-				elements.headers["Accept"] = "application/json;odata=verbose";
-			if (!elements.headers["Content-Type"])
-				elements.headers["Content-Type"] = "application/json;odata=verbose";
-		}
-		if (elements.progressReport)
-			intervalControl = {
-				currentCount: 0,
-				nextCount: elements.progressReport.interval,
-				interval: elements.progressReport.interval,
-				callback: elements.progressReport.callback
-			};
-		else
-			intervalControl = null;
-
-		if (elements.setDigest && elements.setDigest == true) {
-			let match = elements.url.match(/(.*\/_api)/);
-
-			if (match == null)
-				throw "Problem parsing '/_api/' of URL to get request digest value";
-			return $.ajax({  // get digest token
-				url: match[1] + "/contextinfo",
-				method: "POST",
-				headers: SPListREST.stdHeaders,
-				success: (data: TSPResponseData) => {
-					elements.headers!["X-RequestDigest"] = data.FormDigestValue ? data.FormDigestValue :
-						data.d!.GetContextWebInformation!.FormDigestValue;
-					$.ajax({
-						url: elements.url,
-						method: elements.method,
-						headers: elements.headers,
-						data: elements.body as any ?? elements.data as any,
-						success: (data: TSPResponseData, status: string, requestObj: JQueryXHR) => {
-							elements.successCallback!(data, status, requestObj);
-						},
-						error: (requestObj: JQueryXHR, status: string, thrownErr: string) => {
-							if (elements.ignore)
-								for (let i = 0; i < elements.ignore.length; i++)
-									if (elements.ignore[i] == requestObj.status)
-										elements.successCallback({results: []} as TSPResponseData, status, requestObj);
-							elements.errorCallback!(requestObj, status, thrownErr);
-						}
-					});
-				},
-				error: (requestObj: JQueryXHR, status: string, thrownErr: string) => {
-					elements.errorCallback!(requestObj, status, thrownErr);
-				}
-			});
-		} else {
-			if (!elements.method)
-			 	elements.method = "GET";
-			return $.ajax({
-				url: elements.url,
-				method: elements.method,
-				headers: elements.headers,
-				data: elements.body as any ?? elements.data as any,
-				success: (data: TSPResponseData, status: string, requestObj: JQueryXHR) => {
-					if (data.d && data.d.__next) {
-						this.RequestAgain(
-							data.d.__next,
-							data.d.results as any[],
-							intervalControl
-						).then((response: any) => {
-							elements.successCallback!(response);
-						}).catch((response) => {
-							elements.errorCallback!(response);
-						});
-					} else
-						elements.successCallback!(data, status, requestObj);
-				},
-				error: (requestObj: JQueryXHR, status: string, thrownErr: string) => {
-					let ignored = false;
-
-					if (elements.ignore)
-						for (let i = 0; i < elements.ignore.length; i++)
-							if (elements.ignore[i] == requestObj.status) {
-								ignored = true;
-								elements.successCallback({results: []}  as TSPResponseData, status, requestObj);
-							}
-					if (ignored == false)
-						elements.errorCallback!(requestObj, status, thrownErr);
-				}
-			});
-		}
-	}
-
-	static RequestAgain(
-		nextUrl: string,
-		aggregateData: any[],
-		intervalControl: TIntervalControl
-	) {
-		return new Promise((resolve, reject) => {
-			$.ajax({
-				url: nextUrl,
-				method: "GET",
-				headers: SPListREST.stdHeaders,
-				success: (data) => {
-					if (data.d.__next) {
-						if (intervalControl && intervalControl.interval > 0) {
-							intervalControl.currentCount += data.d.results ? data.d.results!.length : 0;
-							if (intervalControl.currentCount! >= intervalControl.nextCount!) {
-								intervalControl.nextCount! += intervalControl.interval;
-								intervalControl.callback(intervalControl.currentCount!);
-							}
-						}
-						this.RequestAgain(
-							data.d.__next,
-							data.d.results,
-							intervalControl
-						).then((response) => {
-							resolve(aggregateData.concat(response));
-						}).catch((response) => {
-							reject(response);
-						});
-					} else
-						resolve(aggregateData.concat(data.d.results));
-				},
-				error: (reqObj) => {
-					reject(reqObj);
-				}
-			});
-		});
-	}
-
-	static httpRequestPromise(parameters: THttpRequestParamsWithPromise) {
-		return new Promise((resolve, reject) => {
-			SPListREST.httpRequest({
-				setDigest: parameters.setDigest,
-				url: parameters.url,
-				method: parameters.method,
-				headers: parameters.headers,
-				data: parameters.data ?? parameters.body,
-				ignore: parameters.ignore,
-				progressReport: parameters.progressReport,
-				successCallback: (data: TSPResponseData, status: string | undefined,
-							reqObj: JQueryXHR | undefined) => {
-					resolve({data: data, message: status, reqObj: reqObj});
-				},
-				errorCallback: (reqObj: JQueryXHR, text: string | undefined, errThrown: string | undefined) => {
-					reject({reqObj: reqObj, text: text, errThrown: errThrown});
-				}
-			});
-		});
-	}
-
 	// query: [optional]
-	getProperties (parameters: any): Promise<any> {
+	getProperties (parameters: unknown): Promise<unknown> {
 		return new Promise((resolve, reject) => {
-			let query: string = constructQueryParameters(parameters);
+			const query: string = //
+					constructQueryParameters(parameters);
 
-			SPListREST.httpRequestPromise({
-				url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')" + query,
+			RESTrequest({
+				url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')" + query,
 				method: "GET",
-			}).then((response) => {
-				resolve(response);
-			}).catch((response) => {
-				reject(response);
+				successCallback: (data) => {
+					resolve(data);
+				},
+				errorCallback: (err) => {
+					reject(err);
+				}
 			});
 		});
 	}
 
-	getListProperties(parameters?: any): Promise<any> {
+	getListProperties(parameters: unknown): Promise<unknown> {
 		return this.getProperties(parameters);
 	}
 
-	getListInfo(parameters?: any): Promise<any> {
+	getListInfo(parameters: unknown): Promise<unknown> {
 		return this.getProperties(parameters);
 	}
 
@@ -688,13 +581,13 @@ class SPListREST {
 		filter?: string | null,
 		selectDisplay?: string[],
 		progressReport?: TIntervalControl,
-		[key: string]: any;
-	}): Promise<any> {
+		[key: string]: unknown;
+	}): Promise<TSpListItem[]> {
 		return new Promise((resolve, reject) => {
 			let query: string = "",
-					filter: string = "",
-					select: string = "",
-					expand: string = "";
+				filter: string = "",
+				select: string = "",
+				expand: string = "";
 
 			if (parameters && parameters.lowId)
 				filter += "Id ge " + parameters.lowId as string;
@@ -708,9 +601,9 @@ class SPListREST {
 			if (parameters.filter)
 				filter = "(" + parameters.filter + ") and (" + filter + ")";
 			if (parameters.selectDisplay && parameters.selectDisplay.length > 0) {
-				for (let displayName of parameters.selectDisplay) {
+				for (const displayName of parameters.selectDisplay) {
 					let found = false;
-					for (let lookupField of this.lookupFieldInfo) {
+					for (const lookupField of this.lookupFieldInfo) {
 						if (lookupField.fieldDisplayName == displayName) {
 							expand += (expand.length > 0 ? "," : "") + lookupField.fieldInternalName;
 							select += (select.length > 0 ? "," : "") + lookupField.fieldInternalName + "/" + lookupField.fieldLookupFieldName;
@@ -740,31 +633,52 @@ class SPListREST {
 					query += "&$filter=" + filter;
 				else
 					query = "?filter=" + filter;
-			SPListREST.httpRequestPromise({
-				url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/items" +
+			RESTrequest({
+				// SPListItemRaw type returned
+				url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')/items" +
 						(parameters && parameters.itemId > 0 ? "(" + parameters.itemId + ")" : "") + query,
-				progressReport: parameters.progressReport
-			}).then((response: any) => {
-				if (response.data.__next)
-					this.getListItemData(response.data.__next);
-				else
-					resolve(response);
-			}).catch((response) => {
-				reject(response);
+				//			progressReport: parameters.progressReport,
+				successCallback: (response, httpInfo) => {
+					if (response.d?.results)
+						resolve(response.d.results as TSpListItem[]);
+					else if (response.d)
+						resolve([response.d as TSpListItem]);
+					else
+						resolve([]);
+				},
+				errorCallback: (errInfo, info) => {
+					reject(errInfo);
+				}
 			});
 		});
 	}
 
-	getListItem(parameters: any): Promise<any> {
+	getListItem(parameters: any): Promise<TSpListItem | null> {
+		return new Promise<TSpListItem | null>((resolve, reject) => {
+			this.getListItemData(parameters).then((response: TSpListItem[] | TSpListItem | null) => {
+				if (Array.isArray(response) == true)
+					response = null;
+				resolve(response as TSpListItem | null);
+			}).catch((err: unknown) => {
+				reject(err);
+			});
+		});
+	}
+
+	getItemData(parameters: any): Promise<TSpListItem[] | TSpListItem | null> {
 		return this.getListItemData(parameters);
 	}
 
-	getItemData(parameters: any): Promise<any> {
-		return this.getListItemData(parameters);
-	}
-
-	getAllListItems(): Promise<any> {
-		return this.getListItemData({itemId: -1});
+	getAllListItems(): Promise<TSpListItem[]> {
+		return new Promise((resolve, reject) => {
+			this.getListItemData({itemId: -1}).then((response) => {
+				if (response != null && Array.isArray(response) == false)
+					response = [];
+				resolve(response);
+			}).catch((err: unknown) => {
+				reject(err);
+			});
+		});
 	}
 
 	getListItemsWithQuery(parameters: {
@@ -773,8 +687,8 @@ class SPListREST {
 		filter: string | null,
 		selectDisplay?: string[] // this must be used to get columns/fields data with that display name
 		progressReport?: TIntervalControl
-	}): Promise<any> {
-		let newParameters = {
+	}): Promise<TSpListItem[] | TSpListItem | null> {
+		const newParameters = {
 			select: parameters.select,
 			expand: parameters.expand,
 			filter: parameters.filter,
@@ -785,30 +699,42 @@ class SPListREST {
 		return this.getListItemData(newParameters);
 	}
 
-	getAllListItemsOptionalQuery(parameters: any): Promise<any> {
+	getAllListItemsOptionalQuery(parameters: any): Promise<TSpListItem[]> {
 		return this.getListItems(parameters);
 	}
 
-	getListItems(parameters?: any): Promise<any> {
-		return this.getListItemData(parameters);
+	getListItems(parameters: any): Promise<TSpListItem[]> {
+		return new Promise<TSpListItem[]>((resolve, reject) => {
+			this.getListItemData(parameters).then((response) => {
+				resolve(response);
+			}).catch((err: unknown) => {
+				reject(err);
+			});
+		});
 	}
 
 	// @param {object} parameters - should have at least {body:,success:}
 	// body format: {string} " 'fieldInternalName': 'value', ...}
-	createListItem(item: {body: THttpRequestBody}) {
-		let body: THttpRequestBody | string = item.body;
+	createListItem(item: {body: THttpRequestBody}): Promise<HttpStatusCode> {
+		return new Promise<HttpStatusCode>((resolve, reject) => {
+			const body: THttpRequestBody | string = item.body;
 
-		if (!body || body == null)
-			throw "The object argument to createListItem() must have a 'body' property";
-//		if (this.checkEntityTypeProperty(body, "item") == false)
-//			body["__SetType__"] = this.listItemEntityTypeFullName;
-		body = formatRESTBody(body);
-		return SPListREST.httpRequestPromise({
-			setDigest: true,
-			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid +
-					"')/items",
-			method: "POST",
-			body: body
+			if (!body || body == null)
+				throw "The object argument to createListItem() must have a 'body' property";
+			//		if (this.checkEntityTypeProperty(body, "item") == false)
+			//			body["__SetType__"] = this.listItemEntityTypeFullName;
+			RESTrequest({
+				setDigest: true,
+				url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')/items",
+				method: "POST",
+				body: body as TXmlHttpRequestData,
+				successCallback: (data) => {
+					resolve(data.status as HttpStatusCode);
+				},
+				errorCallback: (err) => {
+					reject(err);
+				}
+			});
 		});
 	}
 
@@ -818,31 +744,33 @@ class SPListREST {
 	 * 		within the lists and using Internal name property of field
 	 * @returns a promise
 	 */
-	createListItems(items: any[], useBatch: boolean) {
+	createListItems(items: {[key:string]: string}[], useBatch: boolean):
+				Promise<{success: TFetchInfo[]; error: TFetchInfo[]}> | Promise<unknown> {
 		if (useBatch == true) {
-			let requests = [];
+			const requests: IBatchHTTPRequestForm[] = [];
 			// need to re-configure
-			for (let item of items)
+			for (const item of items)
 				requests.push({
-					url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/items",
-					body: item.body,
-					contextinfo: "" // what did I add by this?
+					// type SPListItemRaw[] // need specified entity name
+					url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')/items",
+					contextinfo: this.forApiPrefix,
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json;odata=verbose"
+					},
+					body: item
 				});
-			return batchRequestingQueue({
-				host: this.server,
-				path: this.site,
-				AllHeaders: {
-					"Content-Type": "application/json;odata=verbose"
-				},
-				AllMethods: "POST"
-			}, requests);
+			return batchRequestingQueue(requests);
 		}
-	// the alternative to batching
+		// the alternative to batching
 		return new Promise((resolve, reject) => {
-			serialSPProcessing(this.createListItem, items).then((response: any) => {
+			serialSPProcessing(
+				this.createListItem as ((arg1: unknown) => Promise<unknown>),
+				items
+			).then((response: unknown) => {
 				resolve(response);
-			}).catch((response: any) => {
-				reject(response);
+			}).catch((err: unknown) => {
+				reject(err);
 			});
 		});
 	}
@@ -854,63 +782,71 @@ class SPListREST {
 	 */
 	updateListItem(parameters: {
 		itemId: number;
-		body: THttpRequestBody;
-	}) {
-		let body: THttpRequestBody | string = parameters.body;
+		body: TSpListItem;
+	}): Promise<number> {
+		const body: THttpRequestBody | string = parameters.body;
 
-		return new Promise((resolve, reject) => {
-			this.fixBodyForSpecialFields(body as THttpRequestBody).then((body: any) => {
-				if (checkEntityTypeProperty(body, "item") == false)
-					body["__SetType__"] = this.listItemEntityTypeFullName;
-				body = formatRESTBody(body);
-				SPListREST.httpRequestPromise({
-					setDigest: true,
-					url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid +
+		return new Promise<HttpStatusCode>((resolve, reject) => {
+			this.fixBodyForSpecialFields(body as THttpRequestBody)
+				.then((body: any) => {
+					if (checkEntityTypeProperty(body, "item") == false)
+						body["__SetType__"] = this.listItemEntityTypeFullName;
+					RESTrequest({
+					// SPListItem
+						setDigest: true,
+						url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid +
 								"')/items(" + parameters.itemId + ")",
-					method: "POST",
-					headers: {
-						"X-HTTP-METHOD": "MERGE",
-						"IF-MATCH": "*" // can also use etag
-					},
-					body: body,
-				}).then((response) => {
-					resolve(response);
-				}).catch((response) => {
-					reject(response);
+						method: "POST",
+						headers: {
+							...SPstdHeaders,
+							"X-HTTP-METHOD": "MERGE",
+							"IF-MATCH": "*" // can also use etag
+						},
+						body: body,
+						successCallback: (data) => {
+							resolve(data.status as HttpStatusCode);
+						},
+						errorCallback: (err, headers) => {
+							reject(err);
+						}
+					});
+				}).catch((err: unknown) => {
+					reject(err);
 				});
-			}).catch((response) => {
-				reject(response);
-			});
 		});
 	}
 
-	updateListItems(itemsArray: any[], useBatch: boolean) {
+	updateListItems(
+		itemsArray: {[key:string]:string;}[],
+		useBatch: boolean
+	): Promise<{success: TFetchInfo[]; error: TFetchInfo[]} | null> {
 		if (useBatch == true) {
-			let requests: IBatchHTTPRequestForm[] = [];
+			const requests: IBatchHTTPRequestForm[] = [];
 			// need to re-configure
-			for (let item of itemsArray)
+			for (const item of itemsArray)
 				requests.push({
-					url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/items(" + item.id + ")",
-					body: item.body,
-					contextinfo: "" // I need to do somethng with this
+					url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')/items(" + item.id + ")",
+					contextinfo: this.forApiPrefix,
+					headers: {
+						"Content-Type": "application/json;odata=verbose",
+						"IF-MATCH": "*"
+					},
+					method: "PATCH",
+					body: item
 				});
-			return batchRequestingQueue({
-				host: this.server,
-				path: this.site,
-				AllHeaders: {
-					"Content-Type": "application/json;odata=verbose",
-					"IF-MATCH": "*"
-				},
-				AllMethods: "PATCH"
-			}, requests);
+			return batchRequestingQueue(requests);
 		}
-	// the alternative to batching
+		// the alternative to batching
 		return new Promise((resolve, reject) => {
-			serialSPProcessing(this.updateListItem, itemsArray).then((response: any) => {
-				resolve(response);
-			}).catch((response: any) => {
-				reject(response);
-			});
+			serialSPProcessing(
+				this.updateListItems as ((arg1: unknown) => Promise<unknown>),
+				itemsArray
+			)
+				.then((response: any) => {
+					resolve(response as {success: TFetchInfo[]; error: TFetchInfo[]} | null);
+				}).catch((err: unknown) => {
+					reject(err);
+				});
 		});
 	}
 
@@ -920,36 +856,44 @@ class SPListREST {
 	.itemId [required]
 	.recycle [optional, default=true]. Use false to get hard delete
 	*/
-	deleteListItem(parameters: {itemId: number; recycle: boolean;}): Promise<any> {
-		let recycle = parameters.recycle;
+	deleteListItem(parameters: {
+		itemId: number;
+		recycle: boolean;
+	}): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			const recycle = parameters.recycle;
 
-		if (!recycle)
-			throw "Parameter 'recycle' is required. If 'true', item goes to recycle bin. " +
-					"If 'false', item is permanently deleted.";
-		return SPListREST.httpRequestPromise({
-			url: this.forApiPrefix + "/web/lists" +
-					(this.listName ?
-						"/GetByTitle('" + this.listName + "')" :
-						"(guid'" + this.listGuid + "')") +
-					"/items(" + parameters.itemId + ")" +
-					(recycle == true ? "/recycle()" : ""),
-			method: recycle == true ? "POST" : "DELETE",
-			headers: recycle == true ? { "IF-MATCH": "*" } : { "X-HTTP-METHOD": "DELETE"}
+			if (!recycle)
+				throw "Parameter 'recycle' is required. If 'true', item goes to recycle bin. " +
+						"If 'false', item is permanently deleted.";
+			RESTrequest({
+				url: this.forApiPrefix + "/_api/web/lists" +
+						(this.listName ?
+							"/GetByTitle('" + this.listName + "')" : "(guid'" + this.listGuid + "')") +
+						"/items(" + parameters.itemId + ")" + (recycle == true ? "/recycle()" : ""),
+				method: recycle == true ? "POST" : "DELETE",
+				headers: recycle == true ? { "IF-MATCH": "*" } : { "X-HTTP-METHOD": "DELETE"},
+				successCallback: (data) => {
+
+				},
+				errorCallback: (err) => {}
+			});
 		});
 	}
 
-	getListItemCount (doFresh: boolean = false): Promise<any> {
-		return new Promise((resolve, reject) => {
+	getListItemCount (doFresh: boolean = false): Promise<number> {
+		return new Promise<number>((resolve, reject) => {
 			if (doFresh == false)
 				resolve(this.itemCount);
 			else
-				SPListREST.httpRequest({
-					url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')",
+				RESTrequest({
+					//  SPListRaw
+					url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')",
 					successCallback: (data: TSPResponseData) => {
-						resolve(data.d!.ItemCount);
+						resolve((data.d as SPListRaw).ItemCount);
 					},
-					errorCallback: (reqObj: JQueryXHR) => {
-						reject(reqObj);
+					errorCallback: (errInfo) => {
+						reject(errInfo);
 					}
 				});
 		});
@@ -963,79 +907,72 @@ class SPListREST {
 				this.getListItemCount().then(() => {
 					this.getAllListItemsOptionalQuery({
 						query: "?$select=ID"
-					}).then((response) => {
-						let i, results, IDs = [];
-
-						if (response.data.d)
-							results = response.data.d.results;
-						else if (response.data) // this occurs with response.data.__next
-							results = response.data;
-						for (i = 0; i < results.length; i++)
-							IDs.push(results[i].Id);
-						this.listIds = IDs;
+					}).then((response: TSpListItem[] | null) => {
+						if (response)
+							for (const result of response)
+								this.listIds.push(result.Id);
 						resolve(this.listIds);
-					}).catch((response) => {
-						reject(response);
+					}).catch((err: unknown) => {
+						reject(err);
 					});
-				}).catch((response) => {
-					reject(response);
+				}).catch((err: unknown) => {
+					reject(err);
 				});
 		});
 	}
 
-	isValidID(itemId: number): Promise<any> {
+	isValidID(itemId: number): Promise<unknown> {
 		return new Promise((resolve, reject) => {
 			this.getListItemIds().then((response: number[]) => {
 				resolve(response.includes(itemId));
-			}).catch((response) => {
-				reject(response);
+			}).catch((err: unknown) => {
+				reject(err);
 			});
 		});
 	}
 
-	getListItemIds(): Promise<any> {
+	getListItemIds(): Promise<number[]> {
 		return new Promise((resolve, reject) => {
-			this.loadListItemIds().then( () =>  {
+			this.loadListItemIds().then(() =>  {
 				resolve(this.listIds);
-			}).catch((response) => {
-				reject(response);
+			}).catch((err: unknown) => {
+				reject(err);
 			});
 		});
 	}
 
-	getNextListId(): Promise<any> {
+	getNextListId(): Promise<unknown> {
 		return new Promise((resolve, reject) => {
 			this.loadListItemIds().then( () =>  {
 				if (this.currentListIdIndex == this.listIds.length)
 					resolve(this.listIds[this.currentListIdIndex]);
 				else
 					resolve(this.listIds[++this.currentListIdIndex]);
-			}).catch((response) => {
-				reject (response);
+			}).catch((err: unknown) => {
+				reject (err);
 			});
 		});
 	}
 
 	getPreviousListId() {
-		let thisInstance = this;
-		return new Promise(function (resolve, reject) {
-			thisInstance.loadListItemIds().then( () =>  {
-				if (thisInstance.currentListIdIndex == 0)
-					resolve(thisInstance.listIds[thisInstance.currentListIdIndex]);
-				else
-					resolve(thisInstance.listIds[--thisInstance.currentListIdIndex]);
-			}).catch((response: any) => {
-				reject (response);
-			});
+		return new Promise((resolve, reject) => {
+			this.loadListItemIds()
+				.then(() => {
+					if (this.currentListIdIndex == 0)
+						resolve(this.listIds[this.currentListIdIndex]);
+					else
+						resolve(this.listIds[--this.currentListIdIndex]);
+				}).catch((err: unknown) => {
+					reject (err);
+				});
 		});
 	}
 
-	getFirstListId(): Promise<any> {
-		let thisInstance = this;
-		return new Promise(function (resolve, reject) {
-			thisInstance.loadListItemIds().then( () =>  {
-				resolve(thisInstance.listIds[thisInstance.currentListIdIndex = 0]);
-			}).catch((response) => {
+	getFirstListId(): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			this.loadListItemIds().then(() => {
+				resolve(this.listIds[this.currentListIdIndex = 0]);
+			}).catch((response: unknown) => {
 				reject (response);
 			});
 		});
@@ -1052,21 +989,36 @@ class SPListREST {
 	// ==============================================================================================
 	// ======================================  DOCLIB related REST requests =========================
 	// ==============================================================================================
-	getAllDocLibFiles(): Promise<any> {
-		return SPListREST.httpRequestPromise({
-			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/Files",
-			method: "GET",
+	getAllDocLibFiles(): Promise<SPFileRaw[]> {
+		return new Promise<SPFileRaw[]>((resolve, reject) => {
+			RESTrequest({
+				// SPFile[]
+				url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')/Files",
+				successCallback: (data) => {
+					resolve(data as SPFileRaw[]);
+				},
+				errorCallback: (errInfo) => {
+					reject(errInfo);
+				}
+			});
 		});
 	}
 
 	getFolderFilesOptionalQuery(parameters: {
 		folderPath: string;
-	}): Promise<any> {
-		let query: string = constructQueryParameters(parameters);
-		return SPListREST.httpRequestPromise({
-			url: this.forApiPrefix +	"/web/getFolderByServerRelativeUrl('" + this.baseUrl +
-						parameters.folderPath + "')/Files" + query,
-			method: "GET"
+	}): Promise<unknown> {
+		const query: string = constructQueryParameters(parameters);
+		return new Promise((resolve, reject) => {
+			RESTrequest({
+				url: this.forApiPrefix + "/_api/web/getFolderByServerRelativeUrl('" + this.baseUrl +
+							parameters.folderPath + "')/Files" + query,
+				successCallback: (data) => {
+					resolve(data);
+				},
+				errorCallback: (err) => {
+					reject(err);
+				}
+			});
 		});
 	}
 
@@ -1075,15 +1027,19 @@ class SPListREST {
 	* @param {Object} parameters
 	* @param {string} parameters.fileName - name of file
 	*/
-	getDocLibItemByFileName(parameters: {fileName?:string,itemName?:string}): Promise<any> {
-		if (!(parameters.fileName || parameters.itemName))
-			throw "Method requires 'parameters.fileName' or 'parameters.itemName' " +
-				"to be defined";
-		return SPListREST.httpRequestPromise({
-			url: this.forApiPrefix + "/web/getFolderByServerRelativeUrl('" +
-						this.baseUrl + "')/Files('" + SPListREST.escapeApostrophe(parameters.fileName!) +
-				"')?$expand=ListItemAllFields",
-			method: "GET"
+	getDocLibItemByFileName(fileName:string): Promise<TSpListItem> {
+		return new Promise<TSpListItem>((resolve, reject) => {
+			RESTrequest({
+				url: this.forApiPrefix + "/_api/web/getFolderByServerRelativeUrl('" +
+							this.baseUrl + "')/Files('" + SPListREST.escapeApostrophe(fileName) +
+					"')?$expand=ListItemAllFields",
+				successCallback: (data) => {
+					resolve(data as TSpListItem);
+				},
+				errorCallback: (err) => {
+					reject(err);
+				}
+			});
 		});
 	}
 
@@ -1092,12 +1048,20 @@ class SPListREST {
 	 * @param {number|string} parameters.itemId - ID of item whose data is wanted
 	 * @returns  {Object} returns only the metadata about the file item
 	 */
-	getDocLibItemMetadata(parameters: {itemId:number}): Promise<any> {
-		if (!parameters.itemId)
-			throw "Method requires 'parameters.itemId' to be defined";
-		return SPListREST.httpRequestPromise({
-			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid +
-						"')/items(" + parameters.itemId + ")",
+	getDocLibItemMetadata(parameters: {itemId:number}): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			if (!parameters.itemId)
+				throw "Method requires 'parameters.itemId' to be defined";
+			RESTrequest({
+				url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid +
+							"')/items(" + parameters.itemId + ")",
+				successCallback: (data) => {
+					resolve(data);
+				},
+				errorCallback: (err, info) => {
+					reject(err);
+				}
+			});
 		});
 	}
 	/** @method getDocLibItemFileAndMetaData
@@ -1106,12 +1070,21 @@ class SPListREST {
 	 * @returns {Object} data about the file and metadata of the library item
 	 */
 
-	getDocLibItemFileAndMetaData(parameters: {itemId: number}): Promise<any> {
-		if (!parameters.itemId)
-			throw "Method requires 'parameters.itemId' to be defined";
-		return SPListREST.httpRequestPromise({
-			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid +
-					"')/items(" + parameters.itemId + ")/File?$expand=ListItemAllFields",
+	getDocLibItemFileAndMetaData(parameters: {itemId: number}): Promise<SPFileRaw> {
+		return new Promise<SPFileRaw>((resolve, reject) => {
+			if (!parameters.itemId)
+				throw "Method requires 'parameters.itemId' to be defined";
+			RESTrequest({
+				// SPFileRaw with ListItemAllFields Expanded (SP.Data.listnameItem)
+				url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid +
+						"')/items(" + parameters.itemId + ")/File?$expand=ListItemAllFields",
+				successCallback: (data) => {
+					resolve(data as SPFileRaw);
+				},
+				errorCallback: (err, info) => {
+					reject(err);
+				}
+			});
 		});
 	}
 
@@ -1127,40 +1100,56 @@ class SPListREST {
 		body: TXmlHttpRequestData;
 		folderPath: string;
 		willOverwrite: boolean;
-	}): Promise<any> {
-		let path: string = this.serverRelativeUrl;
-		if (parameters.folderPath.charAt(0) == "/")
-			path += parameters.folderPath;
-		else
-			path += "/" + parameters.folderPath;
-		if (typeof parameters.willOverwrite == "undefined")
-			parameters.willOverwrite = false;
-		return SPListREST.httpRequestPromise({
-			setDigest: true,
-			url: this.forApiPrefix + "/web/getFolderByServerRelativeUrl('" + path + "')" +
-					"/Files/add(url='" + SPListREST.escapeApostrophe(parameters.fileName) +
-					"',overwrite=" + (parameters.willOverwrite == true ? "true" : "false") +
-					")?$expand=ListItemAllFields",
-			method: "POST",
-			body: parameters.body
-		});
-	}
-
-	createFolder(parameters: {folderName: string}): Promise<any> {
-		return SPListREST.httpRequestPromise({
-			setDigest: true,
-			url: this.forApiPrefix + "/web/folders",
-			method: "POST",
-			body: JSON.stringify({
-				"__metadata": {
-					"type": "SP.Folder"
+	}): Promise<HttpStatusCode> {
+		return new Promise<HttpStatusCode>((resolve, reject) => {
+			let path: string = this.serverRelativeUrl;
+			if (parameters.folderPath.charAt(0) == "/")
+				path += parameters.folderPath;
+			else
+				path += "/" + parameters.folderPath;
+			if (typeof parameters.willOverwrite == "undefined")
+				parameters.willOverwrite = false;
+			RESTrequest({
+				setDigest: true,
+				url: this.forApiPrefix + "/_api/web/getFolderByServerRelativeUrl('" + path + "')" +
+						"/Files/add(url='" + SPListREST.escapeApostrophe(parameters.fileName) +
+						"',overwrite=" + (parameters.willOverwrite == true ? "true" : "false") +
+						")?$expand=ListItemAllFields",
+				method: "POST",
+				body: parameters.body,
+				successCallback: (data: TSPResponseData) => {
+					resolve(data.status as HttpStatusCode);
 				},
-				"ServerRelativeUrl": this.serverRelativeUrl + "/" + parameters.folderName
-			})
+				errorCallback: (err) => {
+					reject(err);
+				}
+			});
 		});
 	}
 
-/*/
+	createFolder(parameters: {folderName: string}): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			RESTrequest({
+				setDigest: true,
+				url: this.forApiPrefix + "/_api/web/folders",
+				method: "POST",
+				body: JSON.stringify({
+					"__metadata": {
+						"type": "SP.Folder"
+					},
+					"ServerRelativeUrl": this.serverRelativeUrl + "/" + parameters.folderName
+				}),
+				successCallback: (data) => {
+					resolve(data);
+				},
+				errorCallback: (err) => {
+					reject(err);
+				}
+			});
+		});
+	}
+
+	/*/
 	/**
 	required arguments as parameters properties:
 	.fileName or .itemName
@@ -1198,9 +1187,9 @@ class SPListREST {
 			parameters.willOverwrite = false;
 		else
 			parameters.willOverwrite = (parameters.willOverwrite == true ? "true" : "false");
-		return SPListREST.httpRequestPromise({
+		RESTrequest({
 			setDigest: true,
-			url: this.forApiPrefix + "/web/getFolderByServerRelativeUrl('" +
+			url: this.forApiPrefix + "/_api/web/getFolderByServerRelativeUrl('" +
 						this.baseUrl + "')/Files/add(url='" + SPListREST.escapeApostrophe(
 						parameters.fileName) + "',overwrite=" + parameters.willOverwrite +
 						")?$expand=ListItemAllFields",
@@ -1224,27 +1213,36 @@ class SPListREST {
 	checkOutDocLibItem(parameters: {
 		fileName?: string, itemName?: string,
 		folderPath?: string
-	}): Promise<any> {
+	}): Promise<number> {
 		// parameters.tryCheckOutResolve == true will
 		//   perform a user request of resolving without checking
 		//   if user is identical with checked out user
-		let path: string;
-		if (!(parameters.fileName || parameters.itemName))
-			throw "Method requires 'parameters.fileName' or 'parameters.itemName' " +
-				"to be defined";
-		if (parameters.itemName)
-			parameters.fileName = parameters.itemName;
-		path = this.serverRelativeUrl;
-		if (parameters.folderPath)
-			if (parameters.folderPath.charAt(0) == "/")
-				path += parameters.folderPath;
-			else
-				path += "/" + parameters.folderPath;
-		path += "/" + parameters.fileName;
-		return SPListREST.httpRequestPromise({
-			setDigest: true,
-			url: this.forApiPrefix + "/web/getFileByServerRelativeUrl('" + path + "')/CheckOut()",
-			method: "POST"
+		return new Promise<number>((resolve, reject) => {
+			let path: string;
+			if (!(parameters.fileName || parameters.itemName))
+				throw "Method requires 'parameters.fileName' or 'parameters.itemName' " +
+					"to be defined";
+			if (parameters.itemName)
+				parameters.fileName = parameters.itemName;
+			path = this.serverRelativeUrl;
+			if (parameters.folderPath)
+				if (parameters.folderPath.charAt(0) == "/")
+					path += parameters.folderPath;
+				else
+					path += "/" + parameters.folderPath;
+			path += "/" + parameters.fileName;
+			RESTrequest({
+				setDigest: true,
+				url: this.forApiPrefix + "/_api/web/getFileByServerRelativeUrl('" + path + "')/CheckOut()",
+				method: "POST",
+				body: "",
+				successCallback: (data, httpInfo) => {
+					resolve(httpInfo.status);
+				},
+				errorCallback: (err) => {
+					reject(err);
+				}
+			});
 		});
 	}
 
@@ -1263,40 +1261,42 @@ class SPListREST {
 		itemNames: string[],
 		checkInType?: TSPDocLibCheckInType,
 		checkInComment?: string
-	}): Promise<any> {
+	}): Promise<number> {
 		// checkintype = 0: minor version, = 1: major version, = 2: overwrite
-		let requests: IBatchHTTPRequestForm[] = [],
-			checkinType: number;
+		const requests: IBatchHTTPRequestForm[] = [];
+		let checkinType: number;
 		if (!parameters.itemNames || parameters.itemNames.length == 0)
 			throw "Method requires 'parameters.itemNames' as non-zero length arrays of strings";
 		switch (parameters.checkInType) {
-			case null:
-			case undefined:
-			case "minor":
-			case "Minor":
-				checkinType = 0;
-				break;
-			case "major":
-			case "Major":
-				checkinType = 1;
-				break;
-			case "overwrite":
-			case "Overwrite":
-				checkinType = 2;
-				break;
+		case null:
+		case undefined:
+		case "minor":
+		case "Minor":
+			checkinType = 0;
+			break;
+		case "major":
+		case "Major":
+			checkinType = 1;
+			break;
+		case "overwrite":
+		case "Overwrite":
+			checkinType = 2;
+			break;
 		} // build the batch request
 		// for IDs, must recover the name
 		if (!parameters.checkInComment)
 			parameters.checkInComment = "";
-		for (let itemName of parameters.itemNames)
+		for (const itemName of parameters.itemNames)
 			requests.push({
-				url: this.forApiPrefix + "/web/GetFileByServerRelativeUrl('" + itemName +
+				url: this.forApiPrefix + "/_api/web/GetFileByServerRelativeUrl('" + itemName +
 						"')/CheckIn(comment='" + parameters.checkInComment + "',checkintype=" + checkinType + ")",
-				contextinfo: "" // this is a new parameter, fix it
+				contextinfo: this.forApiPrefix,
+				method: "POST"
 			});
-		return batchRequestingQueue({
-			AllMethods: "POST"
-		} as IBatchHTTPRequestParams, requests);
+		return new Promise<number>((resolve, reject) => {
+			batchRequestingQueue(requests);
+			resolve(1);
+		});
 	}
 
 	/**
@@ -1308,23 +1308,32 @@ class SPListREST {
 	discardCheckOutDocLibItem(parameters: {
 		file: string;
 		folderPath: string;
-	}): Promise<any> {
-		let path: string;
+	}): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			let path: string;
 
-		path = this.baseUrl;
-		if (parameters.folderPath.charAt(0) == "/")
-			path += parameters.folderPath;
-		else
-			path += "/" + parameters.folderPath;
-		path += "/" + parameters.file;
-		return SPListREST.httpRequestPromise({
-			setDigest: true,
-			url: this.forApiPrefix + "/web/GetFileByServerRelativeUrl('" + path + "')" +
-					"/UndoCheckout()",
-			method: "POST"
+			path = this.baseUrl;
+			if (parameters.folderPath.charAt(0) == "/")
+				path += parameters.folderPath;
+			else
+				path += "/" + parameters.folderPath;
+			path += "/" + parameters.file;
+			RESTrequest({
+				// library function
+				setDigest: true,
+				url: this.forApiPrefix + "/_api/web/GetFileByServerRelativeUrl('" + path + "')" +
+						"/UndoCheckout()",
+				method: "POST",
+				body: "", // TODO a post method with no body?
+				successCallback: (data, httpInfo) => {
+					resolve(data);
+				},
+				errorCallback: (err) => {
+					reject(err);
+				}
+			});
 		});
 	}
-
 
 	renameItem(parameters: any) {
 		return this.renameFile(parameters);
@@ -1334,19 +1343,28 @@ class SPListREST {
 		itemId: number;
 		itemName: string;
 		newName: string;
-	}): Promise<any> {
-		return SPListREST.httpRequestPromise({
-			setDigest: true,
-			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid +
-					"')/items(" + parameters.itemId + ")",
-			method: "POST",
-			headers: {
-				"X-HTTP-METHOD": "MERGE",
-				"IF-MATCH": "*" // can also use etag
-			},
-			body: formatRESTBody({
-				FileLeafRef: parameters.itemName ? parameters.itemName : parameters.newName
-			}),
+	}): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			RESTrequest({
+				// SPListItemRaw
+				setDigest: true,
+				url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid +
+						"')/items(" + parameters.itemId + ")",
+				method: "POST",
+				headers: {
+					"X-HTTP-METHOD": "MERGE",
+					"IF-MATCH": "*" // can also use etag
+				},
+				body: JSON.stringify({
+					FileLeafRef: parameters.itemName ? parameters.itemName : parameters.newName
+				}) as TXmlHttpRequestData,
+				successCallback: (data, httpInfo) => {
+					resolve(data);
+				},
+				errorCallback: (err) => {
+					reject(err);
+				}
+			});
 		});
 	}
 
@@ -1357,19 +1375,27 @@ class SPListREST {
 	renameItemWithCheckout(parameters: {
 		itemId: number;
 		newName: string;
-	}): Promise<any> {
-		return SPListREST.httpRequestPromise({
-			setDigest: true,
-			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')" +
-					"/items(" + parameters.itemId + ")",
-			method: "POST",
-			headers: {
-				"X-HTTP-METHOD": "MERGE",
-				"IF-MATCH": "*" // can also use etag
-			},
-			body: {
-				"FileLeadRef": parameters.newName
-			} as any
+	}): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			RESTrequest({
+				setDigest: true,
+				url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')" +
+						"/items(" + parameters.itemId + ")",
+				method: "POST",
+				headers: {
+					"X-HTTP-METHOD": "MERGE",
+					"IF-MATCH": "*" // can also use etag
+				},
+				body: JSON.stringify({
+					"FileLeadRef": parameters.newName
+				}),
+				successCallback: (data) => {
+					resolve(data);
+				},
+				errorCallback: (err) => {
+					reject(err);
+				}
+			});
 		});
 	}
 
@@ -1383,32 +1409,32 @@ class SPListREST {
 		body: string;
 		checkInType?: TSPDocLibCheckInType;
 	}) {
-		let thisInstance = this;
-		return new Promise(function (resolve, reject) {
+		return new Promise((resolve, reject) => {
 			if ((!parameters.itemId || isNaN(parameters.itemId) == true) &&
 				!parameters.fileName)
 				throw "argument must contain {itemId:<value>} or {fileName:<name>}";
 			if (!parameters.body)
 				throw "parameters.body not found/defined: must be formatted JSON string";
 			if (!parameters.fileName)
-				thisInstance.getListItemData({
+				this.getListItemData({
 					itemId: parameters.itemId,
 					expand: "File"
-				}).then((response: any) => {
-					parameters.fileName = response.responseJSON.d.File.Name;
-					thisInstance.continueupdateLibItemWithCheckout(parameters).then((response: any) => {
+				}).then((response: TSpListItem[] | TSpListItem | null) => {
+					if (response && Array.isArray(response) == false)
+						parameters.fileName = (response as TSpListItem).File.Name;
+					this.continueupdateLibItemWithCheckout(parameters).then((response: unknown) => {
 						resolve(response);
-					}).catch((response: any) => {
-						reject(response);
+					}).catch((err: unknown) => {
+						reject(err);
 					});
-				}).catch((response: any) => {
-					reject(response);
+				}).catch((err: unknown) => {
+					reject(err);
 				});
 			else
-				thisInstance.continueupdateLibItemWithCheckout(parameters).then((response: any) => {
+				this.continueupdateLibItemWithCheckout(parameters).then((response: unknown) => {
 					resolve(response);
-				}).catch((response: any) => {
-					reject(response);
+				}).catch((err: unknown) => {
+					reject(err);
 				});
 		});
 	}
@@ -1423,37 +1449,36 @@ class SPListREST {
 		checkInType?: TSPDocLibCheckInType;
 		body: string;
 	}) {
-		let thisInstance = this;
-		return new Promise(function (resolve, reject) {
-			thisInstance.checkOutDocLibItem({
+		return new Promise((resolve, reject) => {
+			this.checkOutDocLibItem({
 				itemName: parameters.fileName,
 			}).then(() => {
-				SPListREST.httpRequestPromise({
+				RESTrequest({
 					setDigest: true,
-					url: thisInstance.forApiPrefix + "/web/lists(guid'" + thisInstance.listGuid +
+					url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid +
 							"')/items(" + parameters.itemId + ")",
 					method: "POST",
 					body: "{ '__metadata': { 'type': '" +
-						thisInstance.listItemEntityTypeFullName + "' }, " +
+						this.listItemEntityTypeFullName + "' }, " +
 						parameters.body + " }",
 					headers: {
 						"X-HTTP-METHOD": "MERGE",
 						"IF-MATCH": "*" // can also use etag
 					},
-				}).then(() => {
-					thisInstance.checkInDocLibItem({
-						itemNames: [ parameters.fileName ],
-						checkInType: parameters.checkInType
-					}).then((response: any) => {
-						resolve(response);
-					}).catch((response: any) => {
-						reject(response);
-					});
-				}).catch((response: any) => {
-					reject(response);
+					successCallback: (data) => {
+						this.checkInDocLibItem({
+							itemNames: [ parameters.fileName ],
+							checkInType: parameters.checkInType
+						}).then((response: unknown) => {
+							resolve(response);
+						}).catch((err: unknown) => {
+							reject(err);
+						});
+					},
+					errorCallback: (err) => {}
 				});
-			}).catch((response: any) => {
-				reject(response);
+			}).catch((err: unknown) => {
+				reject(err);
 			});
 		});
 	}
@@ -1466,34 +1491,35 @@ class SPListREST {
 	updateDocLibItemMetadata(parameters: {
 		itemId: number;
 		body: THttpRequestBody
-	}) {
-		let thisInstance = this;
-		return new Promise(function (resolve, reject) {
+	}): Promise<boolean> {
+	//	const thisInstance = this;
+		return new Promise<boolean>((resolve, reject) => {
 			let itemName: string,
-					majorResponse: any;
-			thisInstance.getDocLibItemFileAndMetaData({
+				majorResponse: number;
+			this.getDocLibItemFileAndMetaData({
 				itemId: parameters.itemId
-			}).then((response: any) => {
-				thisInstance.checkOutDocLibItem({
-					itemName: itemName = response.responseJSON.d.Name
-				}).then(() => {
-					thisInstance.updateListItem({
+			}).then((response: SPFileRaw) => {
+				this.checkOutDocLibItem({
+					itemName: itemName = response.Name
+				}).then((response: number) => {
+					this.updateListItem({
 						itemId: parameters.itemId,
-						body: parameters.body
-					}).then((response: any) => {
+						body: parameters.body as TSpListItem
+					}).then((response: number) => {
 						majorResponse = response;
-						thisInstance.checkInDocLibItem({
+						this.checkInDocLibItem({
 							itemNames: [ itemName ]
 						}).then(() => {
-							resolve(majorResponse);
-						}).catch((response: any) => { // check in failure
-							reject(response);
+							if (majorResponse < 400)
+								resolve(true);
+						}).catch((err: unknown) => { // check in failure
+							reject(err);
 						});
-					}).catch((response: any) => { // update failure
-						reject(response);
+					}).catch((err: unknown) => { // update failure
+						reject(err);
 					});
-				}).catch((response: any) => { // check out failure
-					reject(response);
+				}).catch((err: unknown) => { // check out failure
+					reject(err);
 				});
 			});
 		});
@@ -1510,25 +1536,33 @@ class SPListREST {
 		sourceFileName: string;
 		destinationFileName: string;
 		willOverwrite?: string;
-	}): Promise<any> {
-		let uniqueId;
-		if (!parameters.sourceFileName)
-			throw "parameters.sourceFileName not found/defined";
-		if (!parameters.destinationFileName)
-			throw "parameters.destinationFileName not found/defined";
-		if (typeof parameters.willOverwrite == "undefined")
-			parameters.willOverwrite = "false";
-		return SPListREST.httpRequestPromise({
-			url: this.forApiPrefix + "/web/GetFileByServerRelativeUrl('" +
-					parameters.sourceFileName + "')?$expand=ListItemAllFields",
-			method: "GET"
-		}).then((response: any) => {
-			uniqueId = response.responseJSON.d.UniqueId;
-			SPListREST.httpRequestPromise({
-				url: this.forApiPrefix + "/web/GetFileById(guid'" + uniqueId +
-						"')/CopyTo(strNewUrl='" + parameters.destinationFileName +
-						"',bOverWrite=" + parameters.willOverwrite + ")",
-				method: "POST"
+	}): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			let uniqueId;
+			if (!parameters.sourceFileName)
+				throw "parameters.sourceFileName not found/defined";
+			if (!parameters.destinationFileName)
+				throw "parameters.destinationFileName not found/defined";
+			if (typeof parameters.willOverwrite == "undefined")
+				parameters.willOverwrite = "false";
+			RESTrequest({
+				url: this.forApiPrefix + "/_api/web/GetFileByServerRelativeUrl('" +
+						parameters.sourceFileName + "')?$expand=ListItemAllFields",
+				successCallback: (data, httpInfo) => {
+					uniqueId = data.d?.UniqueId;
+					RESTrequest({
+						url: this.forApiPrefix + "/_api/web/GetFileById(guid'" + uniqueId +
+							"')/CopyTo(strNewUrl='" + parameters.destinationFileName +
+							"',bOverWrite=" + parameters.willOverwrite + ")",
+						method: "POST",
+						successCallback: (data, httpInfo) => {
+							resolve(data);
+						},
+						errorCallback: (err) => {
+							reject(err);
+						}
+					});
+				}
 			});
 		});
 	}
@@ -1547,26 +1581,35 @@ class SPListREST {
 		path?: string;
 		includeBaseUrl?: boolean;
 		recycle?: boolean;
-	}): Promise<any> {
-		if (parameters.folderPath && parameters.fileName)
-			parameters.path = parameters.folderPath + "/" + parameters.fileName;
-		if (typeof parameters.includeBaseUrl == "undefined")
-			parameters.includeBaseUrl = true;
-		return SPListREST.httpRequestPromise({
-			setDigest: true,
-			url: this.forApiPrefix + "/web/GetFileByServerRelativeUrl('" +
-				(parameters.includeBaseUrl == false ? "" : this.baseUrl) + parameters.path + "')" +
-				((parameters.recycle && parameters.recycle == false as boolean) ? "" : "/recycle()"),
-			method: "POST"
+	}): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			if (parameters.folderPath && parameters.fileName)
+				parameters.path = parameters.folderPath + "/" + parameters.fileName;
+			if (typeof parameters.includeBaseUrl == "undefined")
+				parameters.includeBaseUrl = true;
+			RESTrequest({
+				setDigest: true,
+				url: this.forApiPrefix + "/_api/web/GetFileByServerRelativeUrl('" +
+					(parameters.includeBaseUrl == false ? "" : this.baseUrl) + parameters.path + "')" +
+					((parameters.recycle && parameters.recycle == false as boolean) ? "" : "/recycle()"),
+				method: "POST",
+				body: "", // TODO  this needs a body?
+				successCallback: (data, httpInfo) => {
+					resolve(data);
+				},
+				errorCallback: (err) => {
+					reject(err);
+				}
+			});
 		});
 	}
 
 
-/*******************************************************************************
+	/*******************************************************************************
  *     LIST PROPERTY / STRUCTURE REQUESTS: fields, content types, views
  *******************************************************************************/
 
-/****************  Fields  ****************************/
+	/****************  Fields  ****************************/
 	/**
 	 * @method getField -- returns one or more field objects, with properties all or selected, and possible
 	 *     filtering of results
@@ -1580,27 +1623,37 @@ class SPListREST {
 	getField(parameters?: {
 		fields?: {name?: string; guid?: string;}[];
 		filter?: string;
-	} | undefined) {
-		let query = "", filter;
+	} | undefined): Promise<SPFieldRaw[]> {
+		return new Promise<SPFieldRaw[]>((resolve, reject) => {
+			const query = "";
+			let filter: string;
 
-		if (parameters && parameters.fields != null && parameters.fields.length > 0) {
-			if (parameters.filter)
-				filter = parameters.filter;
-			else
-				filter = "";
-			for (let fld of parameters.fields) {
-				if (filter.length > 0)
-					filter += " or ";
-				if (fld.name)
-					filter += "Title eq '" + fld.name + "'";
+			if (parameters && parameters.fields != null && parameters.fields.length > 0) {
+				if (parameters.filter)
+					filter = parameters.filter;
 				else
-					filter = "Id eq '" + fld.guid + "'";
+					filter = "";
+				for (const fld of parameters.fields) {
+					if (filter.length > 0)
+						filter += " or ";
+					if (fld.name)
+						filter += "Title eq '" + fld.name + "'";
+					else
+						filter = "Id eq '" + fld.guid + "'";
+				}
+				parameters.filter = filter;
 			}
-			parameters.filter = filter;
-		}
-	//	query = constructQueryParameters(parameters);
-		return SPListREST.httpRequestPromise({
-			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields" + query
+			//	query = constructQueryParameters(parameters);
+			RESTrequest({
+				// SPField[]
+				url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')/fields" + query,
+				successCallback: (data, httpInfo) => {
+					resolve(data as SPFieldRaw[]);
+				},
+				errorCallback: (err) => {
+					reject(err);
+				}
+			});
 		});
 	}
 
@@ -1608,7 +1661,7 @@ class SPListREST {
 	 * @method getFields -- will return information on all list fields
 	 * @returns Promise with data in then() response
 	 */
-	getFields(parameters?: {filter: string;}): Promise<any> {
+	getFields(parameters?: {filter: string;}): Promise<unknown> {
 		return this.getField(parameters);
 	}
 
@@ -1624,17 +1677,24 @@ class SPListREST {
 		"Required": boolean;
 		"EnforceUniqueValues": boolean;
 		"StaticName": string;
-	}): Promise<any> {
-		let body: THttpRequestBody | string = fieldProperties;
+	}): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			const body: THttpRequestBody | string = fieldProperties;
 
-		if (checkEntityTypeProperty(body, "field") == false)
-			body.__SetType__ = "SP.Field";
-		body = formatRESTBody(body);
-		return SPListREST.httpRequestPromise({
-			setDigest: true,
-			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields",
-			method: "POST",
-			body: body
+			if (checkEntityTypeProperty(body, "field") == false)
+				body.__SetType__ = "SP.Field";
+			RESTrequest({
+				setDigest: true,
+				url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')/fields",
+				method: "POST",
+				body: body as TXmlHttpRequestData,
+				successCallback: (data, httpInfo) => {
+
+				},
+				errorCallback: (errInfo: unknown, fetchInfo) => {
+
+				}
+			});
 		});
 	}
 
@@ -1644,39 +1704,33 @@ class SPListREST {
 	 * 			       objects used to define fields for SPListREST.createField()
 	 * @returns
 	 */
-	createFields(fields: any[]) {
+	createFields(fields: TSpField[]): Promise<unknown> {
 		// field creation can not occur co-synchronously. One must complete before the
 		// next field creation can begin.
 		return new Promise((resolve, reject) => {
-			let body: THttpRequestBody,
-				requests: IBatchHTTPRequestForm[] = [],
-				responses: string = "";
+			const requests: IBatchHTTPRequestForm[] = [];
+			let body: THttpRequestBody;
 
-			for (let fld of fields) {
+			for (const fld of fields) {
 				body = fld;
 				if (checkEntityTypeProperty(body, "field") == false)
 					body.__SetType__ = "SP.Field";
 				requests.push({
-					url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/fields",
+					url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')/fields",
+					contextinfo: this.forApiPrefix,
 					method: "POST",
-					body: JSON.parse(formatRESTBody(body)),
-					contextinfo: "" // something to fix
+					body: body
 				});
 			}
-			batchRequestingQueue({
-				host: this.server,
-				path: this.site,
-				AllHeaders: SPListREST.stdHeaders,
-				AllMethods: "POST"
-			}, requests).then((response: any) => {
+			batchRequestingQueue(requests).then((response: unknown) => {
 				resolve(response);
-			}).catch((response: any) => {
+			}).catch((response: unknown) => {
 				reject(response);
 			});
-/*
-			serialSPProcessing(this.createField, fields).then((response) => {
+			/*
+			serialSPProcessing(this.createField, fields).then((response: unknown) => {
 				resolve(response);
-			}).catch((response) => {
+			}).catch((response: unknown) => {
 				reject(response);
 			});  */
 		});
@@ -1687,29 +1741,35 @@ class SPListREST {
 		currentName?: string;
 		newName: string | undefined;
 	}) {
-		let body: THttpRequestBody;
-
 		if (!parameters.oldName && !parameters.currentName)
 			throw "A parameter for 'oldName' or 'currentName' was not found";
 		if (parameters.oldName)
 			parameters.currentName = parameters.oldName;
 		if (!parameters.newName)
 			throw "A parameters for 'newName' was not found";
-		body = {
+		const body = {
 			"Title": parameters.newName
 		};
 		if (checkEntityTypeProperty(body, "field") == false)
-			body["__SetType__"] = "SP.Field";
-		return SPListREST.httpRequestPromise({
-			setDigest: true,
-			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid +
-					"')/fields/GetByTitle('" + parameters.currentName + "')",
-			method: "POST",
-			headers: {
-				"X-HTTP-METHOD": "MERGE",
-				"IF-MATCH": "*"
-			},
-			body: formatRESTBody(body)
+			(body as any)["__SetType__"] = "SP.Field";
+		return new Promise((resolve, reject) => {
+			RESTrequest({
+				setDigest: true,
+				url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid +
+						"')/fields/GetByTitle('" + parameters.currentName + "')",
+				method: "POST",
+				headers: {
+					"X-HTTP-METHOD": "MERGE",
+					"IF-MATCH": "*"
+				},
+				body: JSON.stringify(body),
+				successCallback: (data, httpInfo) => {
+					resolve(data);
+				},
+				errorCallback: (errInfo: unknown, httpInfo: HttpInfo) => {
+					reject(errInfo);
+				}
+			});
 		});
 	}
 
@@ -1719,7 +1779,13 @@ class SPListREST {
 	 *       @param {(array|arrayAsString)} parameters.choices - the elements that will
 	 *     form the choices for the field, as an array or array written as string
 	 */
-	updateChoiceTypeField (parameters: {id: string; choices?: string[]; choice?: string}) {
+	updateChoiceTypeField (
+		parameters: {
+			id: string;
+			choices?: string[];
+			choice?: string
+		}
+	) {
 		let choices: string;
 		if (Array.isArray(parameters.choices) == true) {
 			choices = JSON.stringify(parameters.choices);
@@ -1730,9 +1796,9 @@ class SPListREST {
 		else
 			throw "parameters must include '.choices' property that is " +
 				"either array or string";
-		return SPListREST.httpRequestPromise({
+		RESTrequest({
 			setDigest: true,
-			url: this.forApiPrefix + "/web/lists(guid'" +
+			url: this.forApiPrefix + "/_api/web/lists(guid'" +
 						this.listGuid + "')/fields(guid'" + parameters.id + "')",
 			method: "POST",
 			headers: {
@@ -1741,7 +1807,9 @@ class SPListREST {
 			},
 			body: "{ '__metadata': { 'type': 'SP.FieldChoice' }, " +
 				"'Choices': { '__metadata': { 'type': 'Collection(Edm.String)' }, " +
-					"'results': " + choices + "} }"
+					"'results': " + choices + "} }",
+			successCallback: (data) => {},
+			errorCallback: (err) => {}
 		});
 	}
 
@@ -1756,32 +1824,41 @@ class SPListREST {
 	 *               query is optional
 	 * @returns -- will return to then() an array of results representing content types and their properties
 	 */
-	 getContentType(parameters: {
-		 contentTypes?: {name?: string; guid?: string}[];
-		 query?: {filter: string;}
-	 } | undefined): Promise<any> {
-		let query = "", filter;
+	getContentType(parameters: {
+		contentTypes?: {name?: string; guid?: string}[];
+		query?: {filter: string;}
+	} | undefined): Promise<SPContentTypeRaw> {
+		return new Promise<SPContentTypeRaw>((resolve, reject) => {
+			let query = "",
+				filter: string;
 
-		if (parameters && parameters.contentTypes != null && parameters.contentTypes.length > 0) {
-			if (parameters.query && parameters.query.filter)
-				filter = parameters.query.filter;
-			else
-				filter = "";
-			for (let ct of parameters.contentTypes) {
-				if (filter.length > 0)
-					filter += " or ";
-				if (ct.name)
-					filter += "Title eq '" + ct.name + "'";
+			if (parameters && parameters.contentTypes != null && parameters.contentTypes.length > 0) {
+				if (parameters.query && parameters.query.filter)
+					filter = parameters.query.filter;
 				else
-					filter = "Id eq '" + ct.guid + "'";
+					filter = "";
+				for (const ct of parameters.contentTypes) {
+					if (filter.length > 0)
+						filter += " or ";
+					if (ct.name)
+						filter += "Title eq '" + ct.name + "'";
+					else
+						filter = "Id eq '" + ct.guid + "'";
+				}
 			}
-		}
-		if (parameters && parameters.query)
-			query = constructQueryParameters(parameters.query);
-		return SPListREST.httpRequestPromise({
-			url: this.forApiPrefix + "/web/lists(guid'" +
-					this.listGuid + "')/contentTypes" + query,
-			method: "GET"
+			if (parameters && parameters.query)
+				query = constructQueryParameters(parameters.query);
+			RESTrequest({
+				// SPContentType[]
+				url: this.forApiPrefix + "/_api/web/lists(guid'" +
+						this.listGuid + "')/contentTypes" + query,
+				successCallback: (data) => {
+					resolve(data as SPContentTypeRaw);
+				},
+				errorCallback: (err) => {
+					reject(err);
+				}
+			});
 		});
 	}
 
@@ -1791,15 +1868,15 @@ class SPListREST {
 	 * 			       object parameter passed to .createcontentType
 	 * @returns
 	 */
-/*/
+	/*/
 	createContentTypes(contentTypes) {
 		// contentType creation can not occur co-synchronously. One must complete before the
 		// next contentType creation can begin.
 
 		return new Promise((resolve, reject) => {
-			serialSPProcessing(this.createContentType, contentTypes).then((response) => {
+			serialSPProcessing(this.createContentType, contentTypes).then((response: unknown) => {
 				resolve(response);
-			}).catch((response) => {
+			}).catch((response: unknown) => {
 				reject(response);
 			});
 		});
@@ -1816,37 +1893,44 @@ class SPListREST {
 	 *               query is optional
 	 * @returns -- will return to then() an array of results representing content types and their properties
 	 */
-	 getView(parameters?: {
-		 	views?: {
-				name?: string;
-				guid?:string;
-			}[],
-			query?: {
-				filter: string;
-			}}): Promise<any> {
-		let query:string = "",
+	getView(parameters?: {
+		views?: {
+			name?: string;
+			guid?:string;
+		}[],
+		query?: {
 			filter: string;
+	}}): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			let query:string = "",
+				filter: string;
 
-		if (parameters && parameters.views != null && parameters.views.length > 0) {
-			if (parameters.query!.filter)
-				filter = parameters.query!.filter;
-			else
-				filter = "";
-			for (let view of parameters.views) {
-				if (filter.length > 0)
-					filter += " or ";
-				if (view.name)
-					filter += "Title eq '" + view.name + "'";
+			if (parameters && parameters.views != null && parameters.views.length > 0) {
+				if (parameters.query!.filter)
+					filter = parameters.query!.filter;
 				else
-					filter = "Id eq '" + view.guid + "'";
+					filter = "";
+				for (const view of parameters.views) {
+					if (filter.length > 0)
+						filter += " or ";
+					if (view.name)
+						filter += "Title eq '" + view.name + "'";
+					else
+						filter = "Id eq '" + view.guid + "'";
+				}
 			}
-		}
-		if (parameters && parameters.query)
-			query = constructQueryParameters(parameters.query);
-		return SPListREST.httpRequestPromise({
-			url: this.forApiPrefix + "/web/lists(guid'" +
-					this.listGuid + "')/views" + query,
-			method: "GET"
+			if (parameters && parameters.query)
+				query = constructQueryParameters(parameters.query);
+			RESTrequest({
+				url: this.forApiPrefix + "/_api/web/lists(guid'" +
+						this.listGuid + "')/views" + query,
+				successCallback: (data, httpInfo) => {
+					resolve(data);
+				},
+				errorCallback: (err, fetchInfo) => {
+					reject(err);
+				}
+			});
 		});
 	}
 
@@ -1855,32 +1939,41 @@ class SPListREST {
 	 * @param {JSONofParms} viewProperties }
 	 * @returns REST API response
 	 */
-	createView(viewsProperties: THttpRequestBody): Promise<any> {
-		let body: THttpRequestBody | string = viewsProperties;
+	createView(viewsProperties: THttpRequestBody): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			let body: THttpRequestBody | string = viewsProperties;
 
-		if (checkEntityTypeProperty(body, "view") == false)
-			body.__SetType__ = "SP.View";
-		body = formatRESTBody(body);
-		return SPListREST.httpRequestPromise({
-			setDigest: true,
-			url: this.forApiPrefix + "/web/lists(guid'" + this.listGuid + "')/views",
-			method: "POST",
-			body: body
+			if (checkEntityTypeProperty(body, "view") == false)
+				body.__SetType__ = "SP.View";
+			body = JSON.stringify(body);
+			RESTrequest({
+				setDigest: true,
+				url: this.forApiPrefix + "/_api/web/lists(guid'" + this.listGuid + "')/views",
+				method: "POST",
+				body: body,
+				successCallback: (response, httpInfo) => {
+					resolve(response);
+				},
+				errorCallback: (errInfo) => {
+					reject(errInfo);
+				}
+			});
 		});
 	}
 
 	setView(viewName: string, fieldNames: string[]) {
+
 		let viewFields = "";
 
-		for (let field of fieldNames)
+		for (const field of fieldNames)
 			viewFields += "<FieldRef Name=\"" + field + "\"/>";
 
-		return SPListREST.httpRequestPromise({
+		RESTrequest({
 			setDigest: true,
-			url: this.forApiPrefix + "/web/GetList(@a1)/Views(@a2)/SetViewXml()?@a1='" +
+			url: this.forApiPrefix + "/_api/web/GetList(@a1)/Views(@a2)/SetViewXml()?@a1='" +
 					this.serverRelativeUrl + "'&@a2='" + this.listGuid + "'",
 			method: "POST",
-			body: {"ViewXml": "<View Name=\"{" + createGuid() + "}\" DefaultView=\"FALSE\" MobileView=\"TRUE\" " +
+			body: JSON.stringify({"ViewXml": "<View Name=\"{" + createGuid() + "}\" DefaultView=\"FALSE\" MobileView=\"TRUE\" " +
 					"MobileDefaultView=\"TRUE\" Type=\"HTML\" DisplayName=\"All Items\" " +
 					"Url=\"" + this.serverRelativeUrl + "/" + viewName + ".aspx\" Level=\"1\" " +
 					"BaseViewID=\"1\" ContentTypeID=\"0x\" ImageUrl=\"/_layouts/15/images/generic.png?rev=47\">" +
@@ -1888,7 +1981,10 @@ class SPListREST {
 					"<ViewFields><FieldRef Name=\"Title\"/><FieldRef Name=\"Created\"/><FieldRef Name=\"Modified\"/>" +
 					viewFields + "</ViewFields>" +
 					"<RowLimit Paged=\"TRUE\">30</RowLimit><JSLink>clienttemplates.js</JSLink><XslLink Default=\"TRUE\">main.xsl</XslLink>" +
-					"<Toolbar Type=\"Standard\"/><Aggregations Value=\"Off\"/></View>"} as any
+					"<Toolbar Type=\"Standard\"/><Aggregations Value=\"Off\"/></View>"}),
+			successCallback: (data, httpInfo) => {
+
+			}
 		});
 	}
 	/**
@@ -1897,18 +1993,22 @@ class SPListREST {
 	 * 			       objects used to define views for SPListREST.createViews()
 	 * @returns
 	 */
-	createViews (views: any[]) {
+	createViews (views: unknown[]): Promise<unknown> {
 		// field creation can not occur co-synchronously. One must complete before the
 		// next field creation can begin.
 		return new Promise((resolve, reject) => {
-			serialSPProcessing(this.createView, views).then((response: any) => {
-				resolve(response);
-			}).catch((response: any) => {
-				reject(response);
-			});
+			serialSPProcessing(
+				this.createView as (arg1: unknown) => Promise<unknown>,
+				views
+			)
+				.then((response: unknown) => {
+					resolve(response);
+				}).catch((err: unknown) => {
+					reject(err);
+				});
 		});
 
-/*
+		/*
 		return new Promise((resolve, reject) => {
 			function recurse(index) {
 				let viewProperties;
@@ -1926,7 +2026,7 @@ class SPListREST {
 						else
 							resolve(true);
 					}
-				}).catch((response) => {
+				}).catch((response: unknown) => {
 					reject(response);
 				});
 			}
@@ -1935,3 +2035,179 @@ class SPListREST {
 	}
 }
 
+
+// if parameters.success not found the request will be SYNCHRONOUS and not ASYNC
+/**
+	 * @method httpRequest -- this is a static method
+	 * @param {ThttpRequestParams} elements
+	 * 	this object contains several properties crucial to setting up a JQuery ajax() call:
+	 * 		url, method, success, error, headers, data
+	 *    it also contains a property 'progressReport' which is object with properties 'interval' (type number)
+	 * 		and 'callback' (type (number) => void). This is intended for network request that might take
+	 * 		a long time with several results cycles. interval is the count of results collected, and
+	 * 		the callback is to a function so that an update in the callback can be done.
+	 * @returns {JQueryXHR}  standard JQuery ajax() return type
+	 */
+/*
+	static httpRequest(elements: THttpRequestParams): JQueryXHR {
+		let intervalControl: TIntervalControl,
+			aggregateResults: unknown[] = [];
+
+		if (!elements.successCallback)
+			throw "HTTP Request for SPListREST requires defining 'successCallback' in parameter 'elements'";
+		if (!elements.errorCallback)
+			throw "HTTP Request for SPListREST requires defining 'errorCallback' in parameter 'elements'";
+		if (typeof elements.headers == "undefined")
+			elements.headers = SPListREST.stdHeaders;
+		else { // default headers
+			if (!elements.headers["Accept"])
+				elements.headers["Accept"] = "application/json;odata=verbose";
+			if (!elements.headers["Content-Type"])
+				elements.headers["Content-Type"] = "application/json;odata=verbose";
+		}
+		if (elements.progressReport) // count of results when multiple network calls needed
+			intervalControl = {
+				currentCount: 0,
+				nextCount: elements.progressReport.interval,
+				interval: elements.progressReport.interval,
+				callback: elements.progressReport.callback
+			};
+		else
+			elements.progressReport = null;
+
+		// for any method other thatn "GET"
+		if (elements.setDigest && elements.setDigest == true) {
+			const match = elements.url.match(/(.*\/_api)/);
+
+			if (match == null)
+				throw "Problem parsing '/_api/' of URL to get request digest value";
+
+			RESTrequest({
+				url: match[1] + "/contextinfo",
+				method: "POST",
+				headers: SPListREST.stdHeaders,
+				successCallback: (data/*, text, reqObj ) => {
+					elements.headers!["X-RequestDigest"] = data.FormDigestValue ? data.FormDigestValue :
+					data.d!.GetContextWebInformation!.FormDigestValue;
+					RESTrequest({
+						url: elements.url,
+						method: elements.method,
+						headers: elements.headers,
+						data: elements.body as unknown ?? elements.data as unknown,
+						successCallback: (data/*, text, reqObj ) => {
+
+						},
+						errorCallback: (reqObj/*, status, errThrown ) => {
+							if (elements.ignore)
+								for (let i = 0; i < elements.ignore.length; i++)
+									if (elements.ignore[i] == requestObj.status)
+										elements.successCallback(data, status, requestObj);
+							elements.errorCallback!(requestObj, status, thrownErr);
+						}
+					});
+				},
+				errorCallback: (reqObj/*, status, errThrown ) => {
+
+				}
+			});
+
+		} else {  // GET methods
+			if (!elements.method)
+			 	elements.method = "GET";
+			return $.ajax({
+				url: elements.url,
+				method: elements.method,
+				headers: elements.headers,
+//				data: elements.body as unknown ?? elements.data as unknown,
+				success: (data: TSPResponseData, status: string, requestObj: JQueryXHR) => {
+					aggregateResults = aggregateResults.concat(data.d?.results);
+					if (data.d && data.d.__next) {  // result data too numerous
+						this.RequestAgain(
+							data.d.__next,
+							data.d.results as unknown[], // aggregate data
+							intervalControl
+						).then((response: unknown) => {
+							elements.successCallback!(response);
+						}).catch((response: unknown) => {
+							elements.errorCallback!(response);
+						});
+					} else
+						elements.successCallback!(data, status, requestObj);
+				},
+				error: (requestObj: JQueryXHR, status: string, thrownErr: string) => {
+					let ignored = false;
+
+					// ignore is an array of HTTP Response codes to ignore
+					// if the returned
+					if (elements.ignore)
+						for (let i = 0; i < elements.ignore.length; i++)
+							if (elements.ignore[i] == requestObj.status) {
+								ignored = true;
+								elements.successCallback(aggregateResults as unknown as TSPResponseData, status, requestObj);
+							}
+					if (ignored == false)
+						elements.errorCallback!(requestObj, status, thrownErr);
+				}
+			});
+		}
+	}
+
+	static RequestAgain(
+		nextUrl: string,
+		aggregateData: unknown[],
+		intervalControl: TIntervalControl
+	): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			$.ajax({
+				url: nextUrl,
+				method: "GET",
+				headers: SPListREST.stdHeaders,
+				success: (data) => {
+					if (data.d.__next) {
+						if (intervalControl && intervalControl.interval > 0) {
+							intervalControl.currentCount += data.d.results ? data.d.results!.length : 0;
+							if (intervalControl.currentCount! >= intervalControl.nextCount!) {
+								intervalControl.nextCount! += intervalControl.interval;
+								intervalControl.callback(intervalControl.currentCount!);
+							}
+						}
+						this.RequestAgain(
+							data.d.__next,
+							data.d.results,
+							intervalControl
+						).then((response: unknown) => {
+							resolve(aggregateData.concat(response));
+						}).catch((err: unknown) => {
+							reject(err);
+						});
+					} else
+						resolve(aggregateData.concat(data.d.results));
+				},
+				error: (reqObj) => {
+					reject(reqObj);
+				}
+			});
+		});
+	}
+
+	static httpRequestPromise(parameters: THttpRequestParamsWithPromise): Promise<unknown> {
+		return new Promise((resolve, reject) => {
+			SPListREST.httpRequest({
+				setDigest: parameters.setDigest,
+				url: parameters.url,
+				method: parameters.method,
+				headers: parameters.headers,
+				data: parameters.data ?? parameters.body,
+				ignore: parameters.ignore,
+				progressReport: parameters.progressReport,
+				successCallback: (data: TSPResponseData, status: string | undefined,
+							reqObj: JQueryXHR | undefined) => {
+					resolve({data: data, message: status, reqObj: reqObj});
+				},
+				errorCallback: (reqObj: JQueryXHR, text: string | undefined, errThrown: string | undefined) => {
+					reject({reqObj: reqObj, text: text, errThrown: errThrown});
+				}
+			});
+		});
+	}
+*/

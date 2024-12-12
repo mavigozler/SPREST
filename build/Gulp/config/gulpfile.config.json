@@ -1,0 +1,311 @@
+﻿{
+	"configNameInfo": [ // format also for InquirerChoice type of Node module 'inquirer'
+		{ "name": "browser", "value": "browser",
+			"description": "building interface for the browser", "disabled": false, "short": "" },
+		{ "name": "node", "value": "node",
+			"description": "building interface for Node", "disabled": false, "short": "" }
+	],
+	"default": {
+		"task": "browser",
+		"stage": "release"
+	},
+	"base": {
+		"ProjectRootPath": "D:/dev/_Projects/AgendaMaker",
+		"GulpRootPath": "${ProjectRootPath}/build/Gulp",
+		"SPbrowserSubDir": "/SPbrowser",
+		"SPbrowserPath": "${ProjectRootPath}/${SPbrowserSubDir}",
+		"SPbrowserScriptsPath": "${SPbrowserPath}/js",
+		"NodeClientPath": "${ProjectRootPath}/nodeJSclient",
+		"LogsPath": "${ProjectRootPath}/logs",
+		"ProjectSourcesSubDir": "/src",
+		"ProjectSourcesPath": "${ProjectRootPath}/${ProjectSourcesSubDir}",
+		"LibsSourcesSubDir": "/srclibs",
+		"LibsSourcesPath": "${ProjectRootPath}/${LibsSourcesSubDir}"
+	},
+	"browser": {
+		"test": {
+			"preclean": null,
+			"tsconfig": {
+				"path": null,  // will go to tsconfig.json, "" = dont use tsconfig.json
+				"compilerOptionsOverrides": {
+					"outDir": "${projectRoot}/lib",
+					"sourceMap": true
+				}
+			},
+			"html": {
+				"templateTransform": [
+					{ "from": "${HTML_TEMPLATES}/SPRESTTemplate.html",
+					  "to": "${HTML}/SPREST.html" }
+				],
+				"subfolderPaths": {
+					"JS": "../js",
+					"CSS": "../css",
+					"HTML": "${projectRoot}/html",
+					"HTML_TEMPLATES": "${projectRoot}/html/Templates",
+					"TEST": "../test"
+				},
+				"links": [
+					"${CSS}/SPREST.css"
+					//{
+					//	"rel": "stylesheet",
+					//	"href": "https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css",
+					//	"integrity": "sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh",
+					//	"crossorigin": "anonymous"
+					//}
+				],
+				"scripts": {
+					"special": [
+						/*{
+							"src": "https://code.jquery.com/jquery-3.6.0.min.js",
+							"integrity": "sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=",
+							"crossorigin": "anonymous"
+						} */
+					],
+					"module": {
+						// format: "%%<string>%%" match a substring in from than map
+						"tsconfigPathMaps": [
+						//	{ "default": "./${JS}" },
+							{ "from": "%%lib%%", "to":"${JS}", "typemodule": false,
+								"flatten": true, 	"except": [ "nobrowser.js" ] }
+						]
+					}
+				},
+				"replace": [],
+				"add": [],
+				"del": []
+			},
+			"copy": [
+				{ "bypass": true },
+				{ "from": [
+					"${projectRoot}/lib/**/{*.js,*.js.map}"
+					],
+					"to": "${projectRoot}/js"
+				},
+				{ "from": [
+					"${projectRoot}/lib/**/{*.js,*.js.map}"
+					],
+					"to": "${projectRoot}/js"
+				}
+			],
+			"moveRename": [
+				///{ "bypass": true }
+				///["${projectRoot}/lib/index.js.map", "${projectRoot}/test/index.js.map"]
+			],
+			"edits": [ // if "^" insert at start, if "$" append replace
+				/// { "bypass": true }
+
+			],
+			"webpack": {
+				"entryJS": "${projectRoot}/${JS}/SPREST",
+				"dest": "${projectRoot}/${JS}"
+			}
+	/*			"cleanup": [{
+				"path": "./js",
+				"filter": "^(?:(?!\\.js$|\\.js\\.map$|\\.tsbuildinfo$).)*$",
+				"recursive": true,
+				"preview": true
+			}] */
+//			"flags": [ "--verbose", "--force" ]
+		},
+/***** RELEASE STAGE ********/
+		"release": {
+			"preclean": {
+				"patterns": [ "${projectRoot}/release/*", "${projectRoot}/lib/**/*",
+						"${projectRoot}/html/*.html" ],
+				"options": { "force": true /*, "preview": true */ }
+			},
+			"tsconfig": {
+				"path": null,  // null = default to root folder 'tsconfig.json'
+				"compilerOptionsOverrides": {
+					/// https://www.npmjs.com/package/gulp-typescript
+					"outDir": "undefined",
+					"thisUndefinedOutDirOverrides": false,
+					"sourceMap": true,
+					"rootDir": null
+						// Specifies the root directory of input files. Only use to control the output
+						//   directory structure with outDir.
+				}
+			},
+			"html": {
+				"templateTransform": [
+					{ "from": "${HTML_TEMPLATES}/SPRESTTemplate.html",
+					  "to": "${HTML}/SPREST.html" }
+				],
+				"subfolderPaths": {
+					"JS": "./js",
+					"CSS": "./css",
+					"HTML": "${projectRoot}/html",
+					"HTML_TEMPLATES": "${projectRoot}/html/Templates"
+				},
+				"links": [
+					"${CSS}/SPREST.css"
+					//{
+					//	"rel": "stylesheet",
+					//	"href": "https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css",
+					//	"integrity": "sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh",
+					//	"crossorigin": "anonymous"
+					//}
+				],
+				"scripts": {
+					"special": [
+						/*{
+							"src": "https://code.jquery.com/jquery-3.6.0.min.js",
+							"integrity": "sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=",
+							"crossorigin": "anonymous"
+						}*/
+					//	{	"src": "https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js",
+					//		"integrity": "sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6",
+					//		"crossorigin": "anonymous" },
+					//
+					],
+					"module": {
+						// format: "%%<string>%%" match a substring in from than map
+						"tsconfigPathMaps": [
+							//	{ "default": "./${JS}" },
+								{ "from": "%%lib%%", "to":"${JS}", "typemodule": false,
+									"flatten": false, 	"except": [ "nobrowser.js" ] ,
+									"filesCopyTo": "${release}/js"
+								}
+							]
+					}
+				},
+				"replace": [],
+				"add": [],
+				"del": []
+			},
+			"copy": [
+				{ "bypass": false },
+				{ "from": [
+						"${projectRoot}/html/SPREST.html"
+					],
+					"to": "${release}"
+				},
+				{
+					"from": [ "${projectRoot}/css/*.css" ],
+					"to": "${release}/css"
+				},
+				{ "from": [
+					"${projectRoot}/test/config.json"
+				],
+				"to": "${release}/js"
+			}
+		],
+			"moveRename": // $$TSCONFIGFIILES, $$TSCONFIGINCLUDE
+			[
+				["${release}/SPREST.html", "${release}/SPREST.aspx"]
+//				["${projectRoot}/lib/**/{*.js,*.js.map}", "${release}/js"]
+//				["${release}/js/postbuild*", "${projectRoot}/build/Gulp/run"]
+			],
+			"edits": [ // if "^" insert at start, if "$" append replace
+			],
+			"webpack": {
+				"entryJS": "${projectRoot}/${JS}/RestRequestingjs",
+				"dest": "${projectRoot}/${JS}"
+			},
+			"cleanup": [
+				/*{
+					"id": "clean JS/JSMAP/tsbuildinfo",
+					"path": "",
+					"filter": "^(?:(?!\\.js$|\\.js\\.map$|\\.tsbuildinfo$).)*$",
+					"recursive": true,
+					"preview": true
+				}*/
+				{
+					"id": "delete files/folders in 'build/Gulp/run'",
+					"path": "${projectRoot}/build/Gulp/run",
+					"filter": "^(?:(?!\\.js$|\\.js\\.map$|\\.tsbuildinfo$).)*$",
+					"recursive": true,
+					"preview": true
+				}
+			]
+		//	"flags": [ "--verbose", "--force" ]
+		}
+	},
+	"node": {
+		"build": {
+			"preclean": {
+				"patterns": [ "${projectRoot}/js/**/*", "${projectRoot}/lib/**/*",
+						"${projectRoot}/html/*Node*.html" ],
+				"options": { "force": true }
+			},
+			"tsconfig": {
+				"path": "tsconfig.node.json",  // will go to tsconfig.json, "" = dont use tsconfig.json
+				"compilerOptionsOverrides": {
+					"outDir": "${projectRoot}/lib",
+					"sourceMap": true
+				}
+			},
+			"html": {
+				"templateTransform": [
+					{ "from": "${HTML_TEMPLATES}/SPRESTTemplate.html",
+					  "to": "${HTML}/SPREST.html" }
+				],
+				"subfolderPaths": {
+					"JS": "../js",
+					"CSS": "../css",
+					"HTML": "${projectRoot}/html",
+					"HTML_TEMPLATES": "${projectRoot}/html/Templates",
+					"TEST": "../test"
+				},
+				"links": [
+					"${CSS}/SPREST.css"
+					//{
+					//	"rel": "stylesheet",
+					//	"href": "https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css",
+					//	"integrity": "sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh",
+					//	"crossorigin": "anonymous"
+					//}
+				],
+				"scripts": {
+					"special": [
+						/*{
+							"src": "https://code.jquery.com/jquery-3.6.0.min.js",
+							"integrity": "sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=",
+							"crossorigin": "anonymous"
+						} */
+					],
+					"module": {
+						// format: "%%<string>%%" match a substring in from than map
+						"tsconfigPathMaps": [
+						//	{ "default": "./${JS}" },
+							{ "from": "%%lib%%", "to":"${JS}", "typemodule": false
+								, "flatten": false
+								//, "except": [ "nobrowser.js" ]
+							}
+						]
+					}
+				},
+				"replace": [],
+				"add": [],
+				"del": []
+			},
+			"copy": [
+			 /* ,
+				{ "from": [
+					"${projectRoot}/release/** /*.{js,js.map}"
+
+					],
+					"to": "${projectRoot}/js/node"
+				}*/
+			],
+			"moveRename": [
+				//["${projectRoot}/lib/index.js.map", "${projectRoot}/test/index.js.map"]
+			],
+			"edits": [ // if "^" insert at start, if "$" append replace
+			],
+			"webpack": {
+				"entryJS": "${projectRoot}/${JS}/SPREST/js",
+				"dest": "${projectRoot}/${JS}"
+			},
+			"cleanup": [
+				{
+					"id": "delete files/folders in 'build/Gulp/run'",
+					"path": "${projectRoot}/build/Gulp/run",
+					"filter": "^(?:(?!\\.js$|\\.js\\.map$|\\.tsbuildinfo$).)*$",
+					"recursive": true,
+					"preview": true
+				}
+			]
+		}
+	}
+}

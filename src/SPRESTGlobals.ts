@@ -1,11 +1,26 @@
 "use strict";
 
+import type {TSpFieldTypes } from "./SPComponentTypes.d.ts";
+
+export {
+	PrincipalTypeGroups,
+	ListTemplateType,
+	PrincipalTypeUsers,
+	getListTemplateTypeLabel,
+	ListTemplateTypeText,
+	RoleTypeKind,
+	SpGroupType,
+	BasePermissions,
+	SPFieldTypes
+}
+
+/*
 enum UserRequestType {
    TYPE_CURRENT_USER,
    TYPE_USER_ID,
    TYPE_LAST_NAME,
    TYPE_FULL_NAME
-};
+}; */
 
 // use as a bit flag
 enum PrincipalTypeGroups {
@@ -83,6 +98,7 @@ enum ListTemplateType {
 	HealthReports=1221,
 	DeveloperSiteDraftApps=1230,
 }
+
 
 function getListTemplateTypeLabel(value: number): keyof typeof ListTemplateType | null {
    for (const label in ListTemplateType) {
@@ -180,13 +196,12 @@ enum SpGroupType {
 }
 
 enum BasePermissions {
-
 	// Permission to view items in lists or libraries
-		ViewListItems = 0x00000001,
+	ViewListItems = 0x00000001,
 	// Permission to add items to lists or libraries
-		AddListItems =  0x00000002,
+	AddListItems =  0x00000002,
 	// Permission to edit items in lists or libraries
-		EditListItems =  0x00000004,
+	EditListItems =  0x00000004,
 	// Permission to delete items from lists or libraries.
 	DeleteListItems = 0x00000008,
 	// Permission to approve items in lists or libraries.
@@ -234,14 +249,155 @@ enum BasePermissions {
 	// Permission to update personal web parts on a web part page.
 	UpdatePersonalWebParts = 0x4000000000,
 	// Permission to perform all administration tasks for the website.
-	ManageWeb = 0x20000000,
-	}
+	//ManageWeb = 0x20000000,
+}
 
 
-const ListItemEntityTypeRE = /EntityType|EntityTypeName|ListItemEntityTypeFullName|metadata/,
-		ListFieldEntityTypeRE = /Entity.*Type|metadata/,
-		ListEntityTypeRE = /List.*Entity.*Type|Entity.*Type|metadata/,
-		ContentTypeEntityTypeRE = /Content.*Entity.*Type|Entity.*Type|metadata/,
-		ViewEntityTypeRE = /View.*Entity.*Type|Entity.*Type|metadata/,
-      emailAddressRegex =
-/(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])/;
+const SPFieldTypes: TSpFieldTypes =  [
+
+		{ name: "Invalid",     typeId: 0 },
+		{ name: "Integer",      metadataType: "SP.FieldNumber",     typeId: 1,
+				extraProperties: [
+					"CommaSeparator",   		// boolean
+					"CustomUnitName",       // string or null
+					"CustomUnitOnRight",    // boolean
+					"DisplayFormat",  		// integer # of decimal digits to display
+					"MaximumValue",         // double type float: max value of num
+					"MinimumValue",			// double type float: min value of num
+					"ShowAsPercentage",		// boolean - render value as percentage
+					"Unit"						// string
+				]
+		},
+		{ name: "Text",         metadataType: "SP.FieldText",           typeId: 2,
+				extraProperties: [
+					"MaxLength"   // integer: gets maximum number of characters allowed for field
+				]
+		},
+		{ name: "Note",         metadataType: "SP.FieldMultiLineText",  typeId: 3,
+				extraProperties: [
+					"AllowHyperlink",   // boolean: get/set whether hyperlink allowed in field value
+					"AppendOnly",       // boolean: get/set whether changes to value are displayed in list forms
+					"IsLongHyperlink",  // boolean:
+					"NumberOfLines",    // integer: get/set # lines to display for field
+					"RestrictionMode",  // boolean: get/set whether to support subset of rich formatting
+					"RichText",         // boolean: get/set whether to support rich formatting
+					"UnlimitedLengthInDocumentLibrary",   // boolean: get/set
+					"WikiLinking",      // boolean:  get value whether implementation-specific mechanism for linking wiki pages
+				]
+		},
+		{ name: "DateTime",     metadataType: "SP.FieldDateTime",  typeId: 4,
+				extraProperties: [
+					"DateTimeCalendarType",   //
+					"DateFormat",             //
+					"DisplayFormat",          //
+					"FriendlyDisplayFormat",  //
+					"TimeFormat"
+				]
+		},
+		{ name: "Counter",      metadataType: "SP.Field",        typeId: 5 },
+		{ name: "Choice",       metadataType: "SP.FieldChoice",  typeId: 6,
+				extraProperties: [
+					"FillInChoice",     // boolean: gets/sets whether fill-in value allowed
+					"Mappings",  // string:
+					"Choices"       //  objects with "results" property that is array of strings with choices
+				]
+		},
+		{ name: "Lookup",       metadataType: "SP.FieldLookup",   typeId: 7,
+				extraProperties: [
+					"AllowMultipleValues",   		// boolean: whether lookup field allows multiple values
+					"DependentLookupInternalNames",  // string or null
+					"IsDependentLookup",    // boolean: gets indication if field is 2ndary lookup field that depends on primary field
+							// for its relationship with lookup list
+					"IsRelationship",  		//boolean: gets/set whether lookup field returned by GetRelatedField from list being looked up
+					"LookupField",         // string: gets/set value of internal field name of field used as lookup value
+					"LookupList",			// string: gets/sets value of list identifier of list containing field to lookup values
+					"LookupWebId",		// SP.Guid: gets/sets value of GUID identifying site containing list which has field for lookup values
+					"PrimaryFieldId",		// string: gets/sets value specifying primary look field identifier if there is a dependent
+								// lookup field; otherwise empty string
+					"RelationshipDeleteBehavior",		// SP.RelationshipDeleteBehaviorType: gets/sets value that specifies delete behavior of lookup field
+					"UnlimitedLengthInDocumentLibrary",	 // boolean:
+				]
+		},
+		{ name: "Boolean",      metadataType: "SP.Field",        typeId: 8 },
+		{ name: "Number",       metadataType: "SP.FieldNumber",  typeId: 9,
+			extraProperties: [
+				"CommaSeparator",   		// boolean
+				"CustomUnitName",       // string or null
+				"CustomUnitOnRight",    // boolean
+				"DisplayFormat",  		// integer # of decimal digits to display
+				"MaximumValue",         // double type float: max value of num
+				"MinimumValue",			// double type float: min value of num
+				"ShowAsPercentage",		// boolean - render value as percentage
+				"Unit"						// string
+			]
+		},
+		{ name: "Currency",     typeId: 10 },
+		{ name: "URL",          metadataType: "SP.FieldUrl",       typeId: 11,
+				extraProperties: [
+					"DisplayFormat"   // integer: unknown about value sets
+				]
+		},
+		{ name: "Computed",     metadataType: "SP.FieldComputed",    typeId: 12,
+				extraProperties: [
+					"EnableLookup"  // boolean: gets/sets value specifying whether lookup field can reference the field
+				]
+		},
+		{ name: "Threading",    typeId: 13 },
+		{ name: "Guid",         metadataType: "SP.FieldGuid",        typeId: 14 }, // so far, just a standard basic field as string
+		{ name: "MultiChoice",  metadataType: "SP.FieldMultiChoice", typeId: 15,
+				extraProperties: [
+					"FillInChoice",     // boolean: gets/sets whether fill-in value allowed
+					"Mappings",  // string:
+					"Choices"       //  objects with "results" property that is array of strings with choices
+				]
+		},
+		{ name: "GridChoice",   typeId: 16 },
+		{ name: "Calculated",   typeId: 17 },
+		{ name: "File",         metadataType: "SP.Field",          typeId: 18 },
+		{ name: "Attachments",  typeId: 19 },
+		{ name: "User",         metadataType: "SP.FieldUser",       typeId: 20,
+				extraProperties: [
+					// these properties are from Lookup type 7
+					"AllowMultipleValues",   		// boolean: whether lookup field allows multiple values
+					"DependentLookupInternalNames",  // string or null
+					"IsDependentLookup",    // boolean: gets indication if field is 2ndary lookup field that depends on primary field
+							// for its relationship with lookup list
+					"IsRelationship",  		//boolean: gets/set whether lookup field returned by GetRelatedField from list being looked up
+					"LookupField",         // string: gets/set value of internal field name of field used as lookup value
+					"LookupList",			// string: gets/sets value of list identifier of list containing field to lookup values
+					"LookupWebId",		// SP.Guid: gets/sets value of GUID identifying site containing list which has field for lookup values
+					"PrimaryFieldId",		// string: gets/sets value specifying primary look field identifier if there is a dependent
+								// lookup field; otherwise empty string
+					"RelationshipDeleteBehavior",		// SP.RelationshipDeleteBehaviorType: gets/sets value that specifies delete behavior of lookup field
+					"UnlimitedLengthInDocumentLibrary",	 // boolean:
+					// these are special to User
+					"AllowDisplay",  		//boolean: gets/set whether to display name of user in survey list
+					"Presence",         // boolean: gets/sets whether presence (online status) is enabled on the field
+					"SelectionGroup",			// number: gets/sets value of identifiter of SP group whose members can be selected as values of field
+					"SelectionMode",		// SP.FieldUserSelectionMode: gets/sets value specifying whether users and groups or only users can be selected
+							// SP.FieldUserSelectionMode.peopleAndGroups = 1, SP.FieldUserSelectionMode.peopleOnly = 0
+					"UserDisplayOptions"		//
+				]
+		},
+		{ name: "Recurrence",   typeId: 21 },
+		{ name: "CrossProjectLink", typeId: 22 },
+		{ name: "ModStat",      typeId: 23, // Moderation Status is a Choices type
+			extraProperties: [
+				"FillInChoice",     // boolean: gets/sets whether fill-in value allowed
+				"Mappings",  // string:
+				"Choices",       //  objects with "results" property that is array of strings with choices
+						// usually "results": ["0;#Approved", "1;#Rejected", "2;#Pending", "3;#Draft", "4;#Scheduled"]
+				"EditFormat"       // integer value for format type in editing
+			]
+		},
+		{ name: "Error",        typeId: 24 },
+		{ name: "ContentTypeId", metadataType: "SP.Field",   typeId: 25 },
+		{ name: "PageSeparator", typeId: 26 },
+		{ name: "ThreadIndex",  typeId: 27 },
+		{ name: "WorkflowStatus", typeId: 28 },
+		{ name: "AllDayEvent",  typeId: 29 },
+		{ name: "WorkflowEventType", typeId: 30 },
+	//	{ name: "Geolocation"   },
+	//	{ name: "OutcomeChoice" },
+		{ name: "MaxItems",     typeId: 31 }
+];
